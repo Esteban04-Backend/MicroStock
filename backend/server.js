@@ -94,9 +94,12 @@ app.post("/ventas", (req, res) => {
     const sql = "INSERT INTO Venta (fecha_venta, id_cliente, id_usuario) VALUES (CURDATE(), ?, ?)";
 
     db.query(sql, [cliente, usuario], (err, result) => {
-        if (err) throw err;
-
-        res.json({ idVenta: result.insertId });
+        if (err) {
+    console.error(err);
+    return res.status(500).json({
+        error: "Error al registrar venta"
+    });
+}        res.json({ idVenta: result.insertId });
     });
 
 });

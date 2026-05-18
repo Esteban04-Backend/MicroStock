@@ -1,10 +1,18 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-    if(document.getElementById("formProducto")){
-        document.getElementById("formProducto")
-        .addEventListener("submit", registrarProducto);
+    const formProducto = document.getElementById("formProducto");
 
+    if(formProducto){
+        formProducto.addEventListener("submit", registrarProducto);
+    }
+
+    // Cargar categorías si existe el select
+    if(document.getElementById("categoria")){
         cargarCategorias();
+    }
+
+    // Mostrar productos si existe la tabla
+    if(document.querySelector("#tablaProductos tbody")){
         mostrarProductos();
     }
 
@@ -61,25 +69,28 @@ function mostrarProductos(){
 
         tabla.innerHTML = "";
 
-        productos.forEach(p => {
+        let html = "";
 
-            let estado = p.stock_actual <= p.stock_minimo
-            ? "Stock Bajo"
-            : "Disponible";
+productos.forEach(p => {
 
-            tabla.innerHTML += `
-            <tr>
-                <td>${p.id_producto}</td>
-                <td>${p.nombre_producto}</td>
-                <td>${p.nombre_categoria}</td>
-                <td>${p.precio_unitario}</td>
-                <td>${p.stock_actual}</td>
-                <td>${p.stock_minimo}</td>
-                <td>${estado}</td>
-            </tr>
-            `;
+    let estado = p.stock_actual <= p.stock_minimo
+    ? "Stock Bajo"
+    : "Disponible";
 
-        });
+    html += `
+    <tr>
+        <td>${p.id_producto}</td>
+        <td>${p.nombre_producto}</td>
+        <td>${p.nombre_categoria}</td>
+        <td>${p.precio_unitario}</td>
+        <td>${p.stock_actual}</td>
+        <td>${p.stock_minimo}</td>
+        <td>${estado}</td>
+    </tr>
+    `;
+});
+
+tabla.innerHTML = html;
 
     })
     .catch(err => {
