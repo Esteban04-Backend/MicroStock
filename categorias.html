@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Gestión de Categorías</title>
+
+<link rel="stylesheet" href="styles.css">
+<script defer src="script.js"></script>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>MicroStock</h1>
+<p>Módulo de gestión de categorías</p>
+
+</header>
+
+<nav>
+
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+</ul>
+
+</nav>
+
+<div class="container">
+
+<h2>Registro de categorías</h2>
+
+<div class="form-box">
+
+<form id="formCategoria">
+
+<label>Nombre de la categoría</label>
+<input type="text" id="nombreCategoria" placeholder="Ej: Bebidas" required>
+
+<label>Descripción</label>
+<input type="text" id="descripcionCategoria" placeholder="Descripción de la categoría">
+
+<label>Estado</label>
+<select id="estadoCategoria">
+
+<option value="Activa">Activa</option>
+<option value="Inactiva">Inactiva</option>
+
+</select>
+
+<button type="submit">Guardar categoría</button>
+
+</form>
+
+</div>
+
+
+<h2>Consulta de categorías</h2>
+
+<div class="form-box">
+
+<label>Buscar categoría</label>
+<input type="text" id="buscarCategoria" placeholder="Escribir nombre de la categoría">
+
+</div>
+
+
+<table id="tablaCategorias">
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Nombre</th>
+<th>Descripción</th>
+<th>Estado</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+</tbody>
+
+</table>
+
+</div>
+
+<footer style="text-align:center;padding:20px;margin-top:30px;">
+
+<p>MicroStock - Sistema de gestión de inventario para microempresarios</p>
+
+</footer>
+
+</body>
+
+</html>

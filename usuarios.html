@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Usuarios</title>
+
+<link rel="stylesheet" href="styles.css">
+
+<style>
+
+.roles-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+gap:20px;
+margin-bottom:30px;
+}
+
+.role-card{
+background:white;
+padding:20px;
+border-radius:8px;
+box-shadow:0 2px 6px rgba(0,0,0,0.08);
+text-align:center;
+}
+
+.role-card h3{
+margin-bottom:10px;
+}
+
+.role-card span{
+font-size:28px;
+font-weight:bold;
+}
+
+.actions-bar{
+display:flex;
+justify-content:space-between;
+margin-bottom:15px;
+gap:10px;
+flex-wrap:wrap;
+}
+
+.actions-bar input,
+.actions-bar select{
+padding:8px;
+border:1px solid #ccc;
+border-radius:4px;
+}
+
+.btn-primary{
+background:#2c3e50;
+color:white;
+padding:10px 15px;
+border:none;
+border-radius:4px;
+cursor:pointer;
+}
+
+.btn-primary:hover{
+background:#34495e;
+}
+
+.table-container table{
+width:100%;
+border-collapse:collapse;
+}
+
+.table-container th,
+.table-container td{
+padding:10px;
+border-bottom:1px solid #ddd;
+text-align:left;
+}
+
+.badge{
+padding:4px 8px;
+border-radius:4px;
+font-size:12px;
+}
+
+.badge-admin{
+background:#3498db;
+color:white;
+}
+
+.badge-vendedor{
+background:#2ecc71;
+color:white;
+}
+
+.badge-inventario{
+background:#f39c12;
+color:white;
+}
+
+.estado-activo{
+color:#27ae60;
+font-weight:bold;
+}
+
+.estado-inactivo{
+color:#c0392b;
+font-weight:bold;
+}
+
+.btn-small{
+padding:5px 8px;
+border:none;
+border-radius:4px;
+cursor:pointer;
+font-size:12px;
+}
+
+.btn-edit{background:#2980b9;color:white;}
+.btn-delete{background:#c0392b;color:white;}
+.btn-toggle{background:#7f8c8d;color:white;}
+
+.modal{
+display:none;
+position:fixed;
+top:0;
+left:0;
+width:100%;
+height:100%;
+background:rgba(0,0,0,0.5);
+align-items:center;
+justify-content:center;
+}
+
+.modal-content{
+background:white;
+padding:25px;
+border-radius:8px;
+width:350px;
+}
+
+.modal-content input,
+.modal-content select{
+width:100%;
+margin-bottom:10px;
+padding:8px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header class="header">
+
+<h1>MicroStock</h1>
+<p>Administración de usuarios</p>
+
+</header>
+
+
+<nav class="navbar">
+
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+</ul>
+
+</nav>
+
+
+<main class="container">
+
+<h2>Gestión de usuarios</h2>
+
+
+<!-- PANEL DE ROLES -->
+
+<section class="roles-grid">
+
+<div class="role-card">
+<h3>Administradores</h3>
+<span id="countAdmin">0</span>
+</div>
+
+<div class="role-card">
+<h3>Vendedores</h3>
+<span id="countVendedor">0</span>
+</div>
+
+<div class="role-card">
+<h3>Inventario</h3>
+<span id="countInventario">0</span>
+</div>
+
+<div class="role-card">
+<h3>Usuarios activos</h3>
+<span id="countActivos">0</span>
+</div>
+
+</section>
+
+
+<!-- ACCIONES -->
+
+<div class="actions-bar">
+
+<button class="btn-primary" onclick="abrirModal()">
++ Crear usuario
+</button>
+
+<input
+type="text"
+placeholder="Buscar usuario..."
+id="buscar"
+onkeyup="filtrarUsuarios()"
+>
+
+<select id="filtroRol" onchange="filtrarUsuarios()">
+
+<option value="">Todos los roles</option>
+<option value="Administrador">Administrador</option>
+<option value="Vendedor">Vendedor</option>
+<option value="Inventario">Inventario</option>
+
+</select>
+
+</div>
+
+
+<!-- TABLA -->
+
+<div class="table-container">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Nombre</th>
+<th>Email</th>
+<th>Rol</th>
+<th>Estado</th>
+<th>Acciones</th>
+
+</tr>
+
+</thead>
+
+<tbody id="tablaUsuarios"></tbody>
+
+</table>
+
+</div>
+
+</main>
+
+
+<!-- MODAL CREAR USUARIO -->
+
+<div class="modal" id="modalUsuario">
+
+<div class="modal-content">
+
+<h3>Nuevo usuario</h3>
+
+<input type="text" id="nombre" placeholder="Nombre">
+
+<input type="email" id="email" placeholder="Correo">
+
+<select id="rol">
+
+<option value="Administrador">Administrador</option>
+<option value="Vendedor">Vendedor</option>
+<option value="Inventario">Inventario</option>
+
+</select>
+
+<button class="btn-primary" onclick="crearUsuario()">Guardar</button>
+
+<button onclick="cerrarModal()">Cancelar</button>
+
+</div>
+
+</div>
+
+
+<script>
+
+let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
+
+function abrirModal(){
+document.getElementById("modalUsuario").style.display="flex";
+}
+
+function cerrarModal(){
+document.getElementById("modalUsuario").style.display="none";
+}
+
+function crearUsuario(){
+
+let nombre=document.getElementById("nombre").value;
+let email=document.getElementById("email").value;
+let rol=document.getElementById("rol").value;
+
+if(!nombre || !email) return alert("Complete los campos");
+
+usuarios.push({
+id:Date.now(),
+nombre,
+email,
+rol,
+estado:"Activo"
+});
+
+localStorage.setItem("usuarios",JSON.stringify(usuarios));
+
+cerrarModal();
+renderUsuarios();
+
+}
+
+function renderUsuarios(){
+
+let tabla=document.getElementById("tablaUsuarios");
+tabla.innerHTML="";
+
+let admin=0;
+let vendedor=0;
+let inventario=0;
+let activos=0;
+
+usuarios.forEach(u=>{
+
+if(u.rol==="Administrador") admin++;
+if(u.rol==="Vendedor") vendedor++;
+if(u.rol==="Inventario") inventario++;
+if(u.estado==="Activo") activos++;
+
+tabla.innerHTML+=`
+
+<tr>
+
+<td>${u.id}</td>
+<td>${u.nombre}</td>
+<td>${u.email}</td>
+
+<td>
+<span class="badge badge-${u.rol.toLowerCase()}">
+${u.rol}
+</span>
+</td>
+
+<td class="${u.estado==="Activo"?"estado-activo":"estado-inactivo"}">
+${u.estado}
+</td>
+
+<td>
+
+<button class="btn-small btn-toggle" onclick="toggleEstado(${u.id})">
+Activar/Desactivar
+</button>
+
+<button class="btn-small btn-delete" onclick="eliminarUsuario(${u.id})">
+Eliminar
+</button>
+
+</td>
+
+</tr>
+
+`;
+
+});
+
+document.getElementById("countAdmin").innerText=admin;
+document.getElementById("countVendedor").innerText=vendedor;
+document.getElementById("countInventario").innerText=inventario;
+document.getElementById("countActivos").innerText=activos;
+
+}
+
+function toggleEstado(id){
+
+usuarios=usuarios.map(u=>{
+if(u.id===id){
+u.estado=u.estado==="Activo"?"Inactivo":"Activo";
+}
+return u;
+});
+
+localStorage.setItem("usuarios",JSON.stringify(usuarios));
+renderUsuarios();
+
+}
+
+function eliminarUsuario(id){
+
+if(confirm("Eliminar usuario?")){
+
+usuarios=usuarios.filter(u=>u.id!==id);
+
+localStorage.setItem("usuarios",JSON.stringify(usuarios));
+
+renderUsuarios();
+
+}
+
+}
+
+function filtrarUsuarios(){
+
+let texto=document.getElementById("buscar").value.toLowerCase();
+let rol=document.getElementById("filtroRol").value;
+
+let filtrados=usuarios.filter(u=>
+
+(u.nombre.toLowerCase().includes(texto) ||
+u.email.toLowerCase().includes(texto)) &&
+
+(rol==="" || u.rol===rol)
+
+);
+
+document.getElementById("tablaUsuarios").innerHTML="";
+
+filtrados.forEach(u=>{
+
+document.getElementById("tablaUsuarios").innerHTML+=`
+
+<tr>
+
+<td>${u.id}</td>
+<td>${u.nombre}</td>
+<td>${u.email}</td>
+<td>${u.rol}</td>
+<td>${u.estado}</td>
+
+<td>
+
+<button class="btn-small btn-toggle" onclick="toggleEstado(${u.id})">
+Estado
+</button>
+
+<button class="btn-small btn-delete" onclick="eliminarUsuario(${u.id})">
+Eliminar
+</button>
+
+</td>
+
+</tr>
+
+`;
+
+});
+
+}
+
+renderUsuarios();
+
+</script>
+
+</body>
+</html>

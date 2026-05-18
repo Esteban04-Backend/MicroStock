@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Gestión de Proveedores</title>
+
+<link rel="stylesheet" href="styles.css">
+<script defer src="script.js"></script>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>MicroStock</h1>
+<p>Módulo de gestión de proveedores</p>
+
+</header>
+
+<nav>
+
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+</ul>
+
+</nav>
+
+<div class="container">
+
+<h2>Registro de proveedores</h2>
+
+<div class="form-box">
+
+<form id="formProveedor">
+
+<label>Nombre del proveedor</label>
+<input type="text" id="nombreProveedor" placeholder="Ej: Distribuidora Central" required>
+
+<label>Teléfono</label>
+<input type="text" id="telefonoProveedor" placeholder="Ej: 3001234567">
+
+<label>Correo electrónico</label>
+<input type="email" id="correoProveedor" placeholder="Ej: proveedor@email.com">
+
+<label>Dirección</label>
+<input type="text" id="direccionProveedor" placeholder="Ej: Calle 45 #12-30">
+
+<label>Estado</label>
+
+<select id="estadoProveedor">
+
+<option value="Activo">Activo</option>
+<option value="Inactivo">Inactivo</option>
+
+</select>
+
+<button type="submit">Guardar proveedor</button>
+
+</form>
+
+</div>
+
+
+<h2>Consulta de proveedores</h2>
+
+<div class="form-box">
+
+<label>Buscar proveedor</label>
+
+<input type="text" id="buscarProveedor" placeholder="Escribir nombre del proveedor">
+
+</div>
+
+
+<table id="tablaProveedores">
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Proveedor</th>
+<th>Teléfono</th>
+<th>Correo</th>
+<th>Dirección</th>
+<th>Estado</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+</tbody>
+
+</table>
+
+</div>
+
+<footer style="text-align:center;padding:20px;margin-top:30px;">
+
+<p>MicroStock - Sistema de gestión de inventario para microempresarios</p>
+
+</footer>
+
+</body>
+
+</html>

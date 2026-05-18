@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Gestión de Productos</title>
+
+<link rel="stylesheet" href="styles.css">
+<script defer src="script.js"></script>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>MicroStock</h1>
+<p>Módulo de gestión de productos</p>
+
+</header>
+
+<nav>
+
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+</ul>
+
+</nav>
+
+<div class="container">
+
+<h2>Registro de productos</h2>
+
+<div class="form-box">
+
+<form id="formProducto">
+
+<label>Nombre del producto</label>
+<input type="text" id="nombre" placeholder="Ej: Arroz 1kg" required>
+
+<label>Precio de venta</label>
+<input type="number" id="precio" placeholder="Ej: 2500" required>
+
+<label>Stock inicial</label>
+<input type="number" id="stock" placeholder="Ej: 50" required>
+
+<label>Stock mínimo</label>
+<input type="number" id="minimo" placeholder="Ej: 10" required>
+
+<label>Categoría</label>
+<select id="categoria"></select>
+
+<button type="submit">Guardar producto</button>
+
+</form>
+
+</div>
+
+
+<h2>Consulta de productos</h2>
+
+<div class="form-box">
+
+<label>Buscar producto</label>
+
+<input type="text" id="buscarProducto" placeholder="Escribir nombre del producto">
+
+</div>
+
+<table id="tablaProductos">
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Producto</th>
+<th>Categoría</th>
+<th>Precio</th>
+<th>Stock</th>
+<th>Stock mínimo</th>
+<th>Estado</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+</tbody>
+
+</table>
+
+</div>
+
+<footer style="text-align:center;padding:20px;margin-top:30px;">
+
+<p>MicroStock - Gestión de inventario para microempresarios</p>
+
+</footer>
+
+</body>
+
+</html>

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Gestión de Alertas</title>
+
+<link rel="stylesheet" href="styles.css">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+.dashboard-alertas{
+display:grid;
+grid-template-columns:1fr 1fr 1fr;
+gap:20px;
+margin-bottom:25px;
+}
+
+.card-alerta{
+background:white;
+padding:18px;
+border-radius:8px;
+box-shadow:0 2px 6px rgba(0,0,0,0.08);
+text-align:center;
+}
+
+.chart-box{
+height:160px;
+}
+
+.alert-table table{
+width:100%;
+border-collapse:collapse;
+}
+
+.alert-table th,
+.alert-table td{
+padding:10px;
+border-bottom:1px solid #eee;
+}
+
+.badge{
+padding:4px 8px;
+border-radius:4px;
+font-size:12px;
+color:white;
+}
+
+.critico{background:#e74c3c;}
+.bajo{background:#f39c12;}
+.normal{background:#2ecc71;}
+
+.estado-pendiente{color:#e67e22;font-weight:bold;}
+.estado-revisado{color:#27ae60;font-weight:bold;}
+.estado-ignorado{color:#7f8c8d;font-weight:bold;}
+
+.btn{
+padding:6px 8px;
+border:none;
+border-radius:4px;
+cursor:pointer;
+font-size:12px;
+margin-right:4px;
+}
+
+.btn-reponer{background:#3498db;color:white;}
+.btn-minimo{background:#8e44ad;color:white;}
+.btn-revisar{background:#27ae60;color:white;}
+.btn-ignorar{background:#7f8c8d;color:white;}
+.btn-eliminar{background:#c0392b;color:white;}
+
+</style>
+
+</head>
+
+<body>
+
+<header class="header">
+<h1>MicroStock</h1>
+<p>Gestión inteligente de alertas</p>
+</header>
+
+<nav class="navbar">
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+</ul>
+</nav>
+
+<main class="container">
+
+<h2>Panel de alertas de inventario</h2>
+
+<div class="dashboard-alertas">
+
+<div class="card-alerta">
+<h4>Alertas críticas</h4>
+<h2 id="criticos">0</h2>
+</div>
+
+<div class="card-alerta">
+<h4>Stock bajo</h4>
+<h2 id="bajos">0</h2>
+</div>
+
+<div class="card-alerta chart-box">
+<canvas id="graficoAlertas"></canvas>
+</div>
+
+</div>
+
+<div class="alert-table">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Producto</th>
+<th>Stock</th>
+<th>Mínimo</th>
+<th>Prioridad</th>
+<th>Estado</th>
+<th>Gestión</th>
+
+</tr>
+
+</thead>
+
+<tbody id="tablaAlertas"></tbody>
+
+</table>
+
+</div>
+
+</main>
+
+<script>
+
+let inventario = JSON.parse(localStorage.getItem("inventario")) || [];
+let alertas = JSON.parse(localStorage.getItem("alertas")) || [];
+
+function generarAlertas(){
+
+alertas=[];
+
+inventario.forEach(p=>{
+
+if(p.stock <= p.minimo){
+
+let prioridad="Bajo";
+
+if(p.stock <= p.minimo * 0.5){
+prioridad="Crítico";
+}
+
+alertas.push({
+producto:p.nombre,
+stock:p.stock,
+minimo:p.minimo,
+prioridad:prioridad,
+estado:"Pendiente"
+});
+
+}
+
+});
+
+localStorage.setItem("alertas",JSON.stringify(alertas));
+
+}
+
+function renderAlertas(){
+
+generarAlertas();
+
+let tabla=document.getElementById("tablaAlertas");
+
+tabla.innerHTML="";
+
+let criticos=0;
+let bajos=0;
+
+alertas.forEach((a,index)=>{
+
+if(a.prioridad==="Crítico") criticos++;
+if(a.prioridad==="Bajo") bajos++;
+
+tabla.innerHTML += `
+<tr>
+
+<td>${a.producto}</td>
+
+<td>${a.stock}</td>
+
+<td>${a.minimo}</td>
+
+<td>
+<span class="badge ${a.prioridad==="Crítico"?"critico":"bajo"}">
+${a.prioridad}
+</span>
+</td>
+
+<td class="estado-${a.estado.toLowerCase()}">
+${a.estado}
+</td>
+
+<td>
+
+<button class="btn btn-reponer"
+onclick="reponerStock('${a.producto}')">
+Reponer
+</button>
+
+<button class="btn btn-minimo"
+onclick="editarMinimo('${a.producto}')">
+Nuevo mínimo
+</button>
+
+<button class="btn btn-revisar"
+onclick="marcarRevisado(${index})">
+Revisado
+</button>
+
+<button class="btn btn-ignorar"
+onclick="ignorarAlerta(${index})">
+Ignorar
+</button>
+
+<button class="btn btn-eliminar"
+onclick="eliminarAlerta(${index})">
+Eliminar
+</button>
+
+</td>
+
+</tr>
+`;
+
+});
+
+document.getElementById("criticos").innerText = criticos;
+document.getElementById("bajos").innerText = bajos;
+
+crearGrafico(criticos,bajos);
+
+}
+
+function crearGrafico(criticos,bajos){
+
+new Chart(document.getElementById("graficoAlertas"),{
+
+type:"doughnut",
+
+data:{
+labels:["Críticos","Stock Bajo"],
+datasets:[{data:[criticos,bajos]}]
+}
+
+});
+
+}
+
+function reponerStock(nombre){
+
+let cantidad = prompt("Cantidad a agregar:");
+
+inventario = inventario.map(p=>{
+
+if(p.nombre === nombre){
+p.stock += parseInt(cantidad);
+}
+
+return p;
+
+});
+
+localStorage.setItem("inventario",JSON.stringify(inventario));
+
+renderAlertas();
+
+}
+
+function editarMinimo(nombre){
+
+let nuevo = prompt("Nuevo stock mínimo:");
+
+inventario = inventario.map(p=>{
+
+if(p.nombre === nombre){
+p.minimo = parseInt(nuevo);
+}
+
+return p;
+
+});
+
+localStorage.setItem("inventario",JSON.stringify(inventario));
+
+renderAlertas();
+
+}
+
+function marcarRevisado(index){
+
+alertas[index].estado="Revisado";
+
+localStorage.setItem("alertas",JSON.stringify(alertas));
+
+renderAlertas();
+
+}
+
+function ignorarAlerta(index){
+
+alertas[index].estado="Ignorado";
+
+localStorage.setItem("alertas",JSON.stringify(alertas));
+
+renderAlertas();
+
+}
+
+function eliminarAlerta(index){
+
+alertas.splice(index,1);
+
+localStorage.setItem("alertas",JSON.stringify(alertas));
+
+renderAlertas();
+
+}
+
+renderAlertas();
+
+</script>
+
+</body>
+</html>

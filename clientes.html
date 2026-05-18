@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Gestión de Clientes</title>
+
+<link rel="stylesheet" href="styles.css">
+<script defer src="script.js"></script>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>MicroStock</h1>
+<p>Módulo de gestión de clientes</p>
+
+</header>
+
+<nav>
+
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+</ul>
+
+</nav>
+
+<div class="container">
+
+<h2>Registro de clientes</h2>
+
+<div class="form-box">
+
+<form id="formCliente">
+
+<label>Nombre del cliente</label>
+<input type="text" id="nombreCliente" placeholder="Ej: Juan Pérez" required>
+
+<label>Teléfono</label>
+<input type="text" id="telefonoCliente" placeholder="Ej: 3001234567">
+
+<label>Correo electrónico</label>
+<input type="email" id="correoCliente" placeholder="Ej: cliente@email.com">
+
+<label>Dirección</label>
+<input type="text" id="direccionCliente" placeholder="Ej: Carrera 10 #15-30">
+
+<label>Estado</label>
+
+<select id="estadoCliente">
+
+<option value="Activo">Activo</option>
+<option value="Inactivo">Inactivo</option>
+
+</select>
+
+<button type="submit">Guardar cliente</button>
+
+</form>
+
+</div>
+
+
+<h2>Consulta de clientes</h2>
+
+<div class="form-box">
+
+<label>Buscar cliente</label>
+
+<input type="text" id="buscarCliente" placeholder="Escribir nombre del cliente">
+
+</div>
+
+
+<table id="tablaClientes">
+
+<thead>
+
+<tr>
+
+<th>ID</th>
+<th>Cliente</th>
+<th>Teléfono</th>
+<th>Correo</th>
+<th>Dirección</th>
+<th>Estado</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+</tbody>
+
+</table>
+
+</div>
+
+<footer style="text-align:center;padding:20px;margin-top:30px;">
+
+<p>MicroStock - Sistema de gestión de inventario para microempresarios</p>
+
+</footer>
+
+</body>
+
+</html>
