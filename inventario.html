@@ -191,98 +191,136 @@ background:#e8f5e9;
 
 <script>
 
-let productos=JSON.parse(localStorage.getItem("productos"))||[]
+let productos=[];
 
-function cargarInventario(){
+async function cargarInventario(){
 
-let tabla=document.getElementById("tablaInventario")
+    const respuesta =
+    await fetch(
+    "http://localhost:3000/productos"
+    );
 
-tabla.innerHTML=""
+    productos =
+    await respuesta.json();
 
-let stockTotal=0
-let valorInventario=0
+    const tabla =
+    document.getElementById(
+    "tablaInventario"
+    );
 
-productos.forEach(p=>{
+    tabla.innerHTML="";
 
-stockTotal+=p.stock
+    let stockTotal=0;
+    let valorInventario=0;
 
-valorInventario+=p.stock*p.precio
+    productos.forEach(p=>{
 
-let estado="Normal"
-let clase="stock-normal"
+        stockTotal +=
+        Number(p.stock_actual);
 
-if(p.stock<=p.minimo){
+        valorInventario +=
+        Number(p.stock_actual)
+        *
+        Number(p.precio_unitario);
 
-estado="Stock bajo"
-clase="stock-bajo"
+        let estado="Normal";
+        let clase="stock-normal";
 
-}
+        if(
+            p.stock_actual
+            <=
+            p.stock_minimo
+        ){
+            estado="Stock Bajo";
+            clase="stock-bajo";
+        }
 
-tabla.innerHTML+=`
+        tabla.innerHTML += `
+        <tr class="${clase}">
+            <td>${p.nombre_producto}</td>
+            <td>${p.precio_unitario}</td>
+            <td>${p.stock_actual}</td>
+            <td>${p.stock_minimo}</td>
+            <td>${estado}</td>
+        </tr>
+        `;
+    });
 
-<tr class="${clase}">
+    document.getElementById(
+    "totalProductos"
+    ).innerText =
+    productos.length;
 
-<td>${p.nombre}</td>
-<td>${p.precio}</td>
-<td>${p.stock}</td>
-<td>${p.minimo}</td>
-<td>${estado}</td>
+    document.getElementById(
+    "stockTotal"
+    ).innerText =
+    stockTotal;
 
-</tr>
-
-`
-
-})
-
-document.getElementById("totalProductos").innerText=productos.length
-document.getElementById("stockTotal").innerText=stockTotal
-document.getElementById("valorInventario").innerText=valorInventario
+    document.getElementById(
+    "valorInventario"
+    ).innerText =
+    valorInventario;
 
 }
 
 function buscarProducto(){
 
-let texto=document.getElementById("buscarProducto").value.toLowerCase()
+    const texto =
+    document
+    .getElementById(
+    "buscarProducto"
+    )
+    .value
+    .toLowerCase();
 
-let filtrados=productos.filter(p=>p.nombre.toLowerCase().includes(texto))
+    const filtrados =
+    productos.filter(p=>
 
-let tabla=document.getElementById("tablaInventario")
+        p.nombre_producto
+        .toLowerCase()
+        .includes(texto)
 
-tabla.innerHTML=""
+    );
 
-filtrados.forEach(p=>{
+    const tabla =
+    document.getElementById(
+    "tablaInventario"
+    );
 
-let estado="Normal"
-let clase="stock-normal"
+    tabla.innerHTML="";
 
-if(p.stock<=p.minimo){
+    filtrados.forEach(p=>{
 
-estado="Stock bajo"
-clase="stock-bajo"
+        let estado="Normal";
+        let clase="stock-normal";
+
+        if(
+            p.stock_actual
+            <=
+            p.stock_minimo
+        ){
+            estado="Stock Bajo";
+            clase="stock-bajo";
+        }
+
+        tabla.innerHTML += `
+        <tr class="${clase}">
+            <td>${p.nombre_producto}</td>
+            <td>${p.precio_unitario}</td>
+            <td>${p.stock_actual}</td>
+            <td>${p.stock_minimo}</td>
+            <td>${estado}</td>
+        </tr>
+        `;
+
+    });
 
 }
 
-tabla.innerHTML+=`
-
-<tr class="${clase}">
-
-<td>${p.nombre}</td>
-<td>${p.precio}</td>
-<td>${p.stock}</td>
-<td>${p.minimo}</td>
-<td>${estado}</td>
-
-</tr>
-
-`
-
-})
-
-}
-
-cargarInventario()
+cargarInventario();
 
 </script>
+
 
 </body>
 

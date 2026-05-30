@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Mostrar productos si existe la tabla
     if(document.querySelector("#tablaProductos tbody")){
         mostrarProductos();
+        cargarCategorias();
     }
     //categorias
     if(document.getElementById("formCategoria")){
@@ -28,6 +29,38 @@ document.addEventListener("DOMContentLoaded", () => {
     mostrarCategorias();
 }
 });
+// definimos la funcion para ppoder cargar las categorias
+async function cargarCategorias(){
+
+    const respuesta =
+    await fetch(
+    "http://localhost:3000/categorias"
+    );
+
+    const categorias =
+    await respuesta.json();
+
+    const select =
+    document.getElementById(
+    "categoria"
+    );
+
+    if(!select) return;
+
+    select.innerHTML =
+    "<option value=''>Seleccione</option>";
+
+    categorias.forEach(c=>{
+
+        select.innerHTML += `
+        <option value="${c.id_categoria}">
+            ${c.nombre_categoria}
+        </option>
+        `;
+
+    });
+
+}
 /* PRODUCTOS */
 
 function registrarProducto(e){
