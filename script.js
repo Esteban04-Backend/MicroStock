@@ -15,7 +15,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if(document.querySelector("#tablaProductos tbody")){
         mostrarProductos();
     }
+    //categorias
+    if(document.getElementById("formCategoria")){
 
+    document
+    .getElementById("formCategoria")
+    .addEventListener(
+        "submit",
+        registrarCategoria
+    );
+
+    mostrarCategorias();
+}
 });
 /* PRODUCTOS */
 
@@ -117,6 +128,68 @@ function cargarCategorias() {
                 </option>
             `;
         });
+
+    });
+
+}
+// CATEGORIAS
+async function registrarCategoria(e){
+
+    e.preventDefault();
+
+    const nombre =
+    document.getElementById("nombreCategoria").value;
+
+    const descripcion =
+    document.getElementById("descripcionCategoria").value;
+
+    const respuesta = await fetch(
+        "http://localhost:3000/categorias",
+        {
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+                nombre,
+                descripcion
+            })
+        }
+    );
+
+    const data = await respuesta.json();
+
+    alert(data.mensaje);
+
+    mostrarCategorias();
+
+}
+
+async function mostrarCategorias(){
+
+    const respuesta =
+    await fetch("http://localhost:3000/categorias");
+
+    const categorias =
+    await respuesta.json();
+
+    const tabla =
+    document.querySelector("#tablaCategorias tbody");
+
+    if(!tabla) return;
+
+    tabla.innerHTML="";
+
+    categorias.forEach(c=>{
+
+        tabla.innerHTML += `
+        <tr>
+            <td>${c.id_categoria}</td>
+            <td>${c.nombre_categoria}</td>
+            <td>${c.descripcion_categoria}</td>
+            <td>Activa</td>
+        </tr>
+        `;
 
     });
 

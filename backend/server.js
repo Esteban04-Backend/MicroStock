@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// CONEXIÓN A TU BASE DE DATOS REAL
+// CONEXIÓN A LA BASE DE DATOS
 const db = mysql.createConnection({
     host: "localhost",
     user: "root",
@@ -113,4 +113,32 @@ app.get("/categorias", (req, res) => {
         }
         res.json(result);
     });
+});
+// Crear categoria
+
+app.post("/categorias", (req,res)=>{
+
+    const { nombre, descripcion } = req.body;
+
+    const sql = `
+    INSERT INTO Categoria
+    (nombre_categoria, descripcion_categoria)
+    VALUES (?,?)
+    `;
+
+    db.query(sql,[nombre,descripcion],(err,result)=>{
+
+        if(err){
+            console.error(err);
+            return res.status(500).json({
+                error:"Error al guardar categoría"
+            });
+        }
+
+        res.json({
+            mensaje:"Categoría guardada correctamente"
+        });
+
+    });
+
 });
