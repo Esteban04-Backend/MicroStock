@@ -1,3 +1,4 @@
+// Inicializa todos los eventos y cargas automáticas al abrir la página
 document.addEventListener("DOMContentLoaded", () => {
 
     const formProducto = document.getElementById("formProducto");
@@ -31,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 // definimos la funcion para ppoder cargar las categorias
 async function cargarCategorias(){
-
+// Consulta las categorías disponibles mediante la API REST
     const respuesta =
     await fetch(
     "http://localhost:3000/categorias"
@@ -62,7 +63,7 @@ async function cargarCategorias(){
 
 }
 /* PRODUCTOS */
-
+// Envía al servidor los datos de un nuevo producto para almacenarlo en MySQL
 function registrarProducto(e){
     e.preventDefault();
 
@@ -71,7 +72,7 @@ function registrarProducto(e){
     let stock = document.getElementById("stock").value;
     let minimo = document.getElementById("minimo").value;
     let categoria = document.getElementById("categoria").value;
-
+// Petición POST para registrar un producto
     fetch("http://localhost:3000/productos", {
         method: "POST",
         headers: {
@@ -92,7 +93,7 @@ function registrarProducto(e){
     })
     .catch(err => console.error(err));
 }
-
+// Obtiene y muestra todos los productos registrados
 function mostrarProductos(){
 
     fetch("http://localhost:3000/productos")
@@ -114,7 +115,7 @@ function mostrarProductos(){
         tabla.innerHTML = "";
 
         let html = "";
-
+// Construye dinámicamente las filas de la tabla de productos
 productos.forEach(p => {
 
     let estado = p.stock_actual <= p.stock_minimo
@@ -166,6 +167,7 @@ function cargarCategorias() {
 
 }
 // CATEGORIAS
+// Envía los datos de una nueva categoría al backend
 async function registrarCategoria(e){
 
     e.preventDefault();
@@ -175,7 +177,7 @@ async function registrarCategoria(e){
 
     const descripcion =
     document.getElementById("descripcionCategoria").value;
-
+// Petición POST para registrar una categoría en MySQL
     const respuesta = await fetch(
         "http://localhost:3000/categorias",
         {
@@ -197,7 +199,7 @@ async function registrarCategoria(e){
     mostrarCategorias();
 
 }
-
+// Consulta y muestra todas las categorías almacenadas en la base de datos
 async function mostrarCategorias(){
 
     const respuesta =

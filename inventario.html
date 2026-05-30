@@ -157,14 +157,14 @@ background:#e8f5e9;
 </div>
 
 
-<!-- PANEL INVENTARIO -->
+<!-- PANEL PRINCIPAL INVENTARIO -->
 
 <div class="panel">
 
 <h2>Inventario actual</h2>
-
+<!-- Campo de búsqueda dinámica de productos -->
 <input type="text" id="buscarProducto" placeholder="Buscar producto..." onkeyup="buscarProducto()">
-
+<!-- Tabla que muestra el estado actual del inventario -->
 <table>
 
 <thead>
@@ -190,11 +190,11 @@ background:#e8f5e9;
 </div>
 
 <script>
-
+// Arreglo global que almacena los productos obtenidos desde MySQL
 let productos=[];
-
+// Consulta los productos registrados y construye el inventario dinámicamente
 async function cargarInventario(){
-
+// Solicita los datos de productos al servidor Node.js
     const respuesta =
     await fetch(
     "http://localhost:3000/productos"
@@ -212,7 +212,7 @@ async function cargarInventario(){
 
     let stockTotal=0;
     let valorInventario=0;
-
+// Recorre cada producto para calcular métricas y construir la tabla
     productos.forEach(p=>{
 
         stockTotal +=
@@ -225,7 +225,7 @@ async function cargarInventario(){
 
         let estado="Normal";
         let clase="stock-normal";
-
+// Verifica si el producto se encuentra por debajo del stock mínimo
         if(
             p.stock_actual
             <=
@@ -262,7 +262,7 @@ async function cargarInventario(){
     valorInventario;
 
 }
-
+// Filtra productos en tiempo real según el texto ingresado
 function buscarProducto(){
 
     const texto =
@@ -316,7 +316,7 @@ function buscarProducto(){
     });
 
 }
-
+// Inicializa la carga de inventario al abrir la página
 cargarInventario();
 
 </script>
