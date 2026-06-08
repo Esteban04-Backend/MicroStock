@@ -93,7 +93,7 @@ function registrarProducto(e){
     })
     .catch(err => console.error(err));
 }
-// Obtiene y muestra todos los productos registrados
+// Obtiene y muestra todos los productos registrados con el localhost:3000/productos
 function mostrarProductos(){
 
     fetch("http://localhost:3000/productos")
