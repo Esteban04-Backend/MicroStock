@@ -242,38 +242,79 @@ REGISTRAR COMPRA
 
 <script>
 
-let carrito=[]
-let productos=JSON.parse(localStorage.getItem("productos"))||[]
-let proveedores=JSON.parse(localStorage.getItem("proveedores"))||[]
+let carrito = [];
+let productos = [];
+let proveedores = [];
 
-function cargarDatos(){
+async function cargarDatos(){
 
-let prodSelect=document.getElementById("productoCompra")
-let provSelect=document.getElementById("proveedorCompra")
-let grid=document.getElementById("listaProductos")
+    const respuestaProductos =
+    await fetch("http://localhost:3000/productos");
 
-prodSelect.innerHTML='<option value="">Seleccionar producto</option>'
-provSelect.innerHTML='<option value="">Seleccionar proveedor</option>'
-grid.innerHTML=""
+    productos =
+    await respuestaProductos.json();
 
-productos.forEach((p,i)=>{
+    const respuestaProveedores =
+    await fetch("http://localhost:3000/proveedores");
 
-prodSelect.innerHTML+=`<option value="${i}">${p.nombre}</option>`
+    proveedores =
+    await respuestaProveedores.json();
 
-let card=document.createElement("div")
-card.className="product-card"
-card.innerHTML=`<strong>${p.nombre}</strong><br>Stock: ${p.stock}`
-card.onclick=()=>agregarCarrito(p,1,p.precio)
+    let prodSelect =
+    document.getElementById("productoCompra");
 
-grid.appendChild(card)
+    let provSelect =
+    document.getElementById("proveedorCompra");
 
-})
+    let grid =
+    document.getElementById("listaProductos");
 
-proveedores.forEach((pr,i)=>{
+    prodSelect.innerHTML =
+    '<option value="">Seleccionar producto</option>';
 
-provSelect.innerHTML+=`<option value="${i}">${pr.nombre}</option>`
+    provSelect.innerHTML =
+    '<option value="">Seleccionar proveedor</option>';
 
-})
+    grid.innerHTML = "";
+
+    productos.forEach((p,i)=>{
+
+        prodSelect.innerHTML += `
+        <option value="${i}">
+            ${p.nombre_producto}
+        </option>
+        `;
+
+        let card =
+        document.createElement("div");
+
+        card.className="product-card";
+
+        card.innerHTML=`
+        <strong>${p.nombre_producto}</strong>
+        <br>
+        Stock: ${p.stock_actual}
+        `;
+
+        card.onclick=()=>agregarCarrito(
+            p,
+            1,
+            Number(p.precio_unitario)
+        );
+
+        grid.appendChild(card);
+
+    });
+
+    proveedores.forEach((pr,i)=>{
+
+        provSelect.innerHTML += `
+        <option value="${pr.id_proveedor}">
+            ${pr.nombre_proveedor}
+        </option>
+        `;
+
+    });
 
 }
 
@@ -308,9 +349,10 @@ item.cantidad+=cantidad
 
 carrito.push({
 
-nombre:producto.nombre,
-precio:precio,
-cantidad:cantidad
+id_producto: producto.id_producto,
+nombre: producto.nombre_producto,
+precio: Number(precio),
+cantidad: cantidad
 
 })
 
@@ -353,48 +395,78 @@ document.getElementById("totalCompra").innerText=total
 
 }
 
-function registrarCompra(){
+async function registrarCompra(){
 
-if(carrito.length==0){
+    if(carrito.length==0){
 
-alert("Debe agregar productos")
-return
+        alert("Debe agregar productos");
+        return;
 
-}
+    }
 
-let compras=JSON.parse(localStorage.getItem("compras"))||[]
+    const proveedor =
 
-carrito.forEach(item=>{
+    document.getElementById(
+        "proveedorCompra"
+    ).value;
 
-let producto=productos.find(p=>p.nombre==item.nombre)
+    if(proveedor==""){
 
-if(producto){
+        alert("Seleccione un proveedor");
 
-producto.stock+=item.cantidad
+        return;
 
-}
+    }
 
-})
+    const datos={
 
-localStorage.setItem("productos",JSON.stringify(productos))
+        proveedor:Number(proveedor),
 
-let compra={
+        usuario:1,
 
-fecha:new Date().toLocaleString(),
-detalle:carrito,
-total:document.getElementById("totalCompra").innerText
+        productos:carrito
 
-}
+    };
 
-compras.push(compra)
+    const respuesta = await fetch(
 
-localStorage.setItem("compras",JSON.stringify(compras))
+        "http://localhost:3000/compras/completa",
 
-alert("Compra registrada")
+        {
 
-carrito=[]
+            method:"POST",
 
-actualizarCarrito()
+            headers:{
+
+                "Content-Type":"application/json"
+
+            },
+
+            body:JSON.stringify(datos)
+
+        }
+
+    );
+
+    const resultado = await respuesta.json();
+
+    if(respuesta.ok){
+
+        alert(resultado.mensaje);
+
+        carrito=[];
+
+        actualizarCarrito();
+
+        cargarDatos();
+
+    }
+
+    else{
+
+        alert(resultado.error);
+
+    }
 
 }
 
@@ -402,7 +474,13 @@ function buscarProducto(){
 
 let texto=document.getElementById("buscarProductoCompra").value.toLowerCase()
 
-let filtrados=productos.filter(p=>p.nombre.toLowerCase().includes(texto))
+let filtrados = productos.filter(p=>
+
+p.nombre_producto
+.toLowerCase()
+.includes(texto)
+
+)
 
 let grid=document.getElementById("listaProductos")
 
@@ -412,8 +490,12 @@ filtrados.forEach(p=>{
 
 let card=document.createElement("div")
 card.className="product-card"
-card.innerHTML=`<strong>${p.nombre}</strong><br>Stock: ${p.stock}`
-card.onclick=()=>agregarCarrito(p,1,p.precio)
+card.innerHTML=`
+<strong>${p.nombre_producto}</strong>
+<br>
+Stock: ${p.stock_actual}
+`
+card.onclick=()=>agregarCarrito(p,1,Number(p.precio_unitario))
 
 grid.appendChild(card)
 

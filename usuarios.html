@@ -281,9 +281,7 @@ onkeyup="filtrarUsuarios()"
 
 <select id="rol">
 
-<option value="Administrador">Administrador</option>
-<option value="Vendedor">Vendedor</option>
-<option value="Inventario">Inventario</option>
+<option value="">Seleccione un rol</option>
 
 </select>
 
@@ -298,7 +296,9 @@ onkeyup="filtrarUsuarios()"
 
 <script>
 
-let usuarios = JSON.parse(localStorage.getItem("usuarios")) || [];
+let usuarios = [];
+
+let roles = [];
 
 function abrirModal(){
 document.getElementById("modalUsuario").style.display="flex";
@@ -307,87 +307,182 @@ document.getElementById("modalUsuario").style.display="flex";
 function cerrarModal(){
 document.getElementById("modalUsuario").style.display="none";
 }
+async function cargarRoles(){
 
-function crearUsuario(){
+    const respuesta =
+    await fetch(
+        "http://localhost:3000/roles"
+    );
 
-let nombre=document.getElementById("nombre").value;
-let email=document.getElementById("email").value;
-let rol=document.getElementById("rol").value;
+    roles =
+    await respuesta.json();
 
-if(!nombre || !email) return alert("Complete los campos");
+    const select =
+    document.getElementById("rol");
 
-usuarios.push({
-id:Date.now(),
-nombre,
-email,
-rol,
-estado:"Activo"
-});
+    select.innerHTML =
+    '<option value="">Seleccione un rol</option>';
 
-localStorage.setItem("usuarios",JSON.stringify(usuarios));
+    roles.forEach(r=>{
 
-cerrarModal();
-renderUsuarios();
+        select.innerHTML += `
+
+        <option value="${r.id_rol}">
+
+            ${r.nombre_rol}
+
+        </option>
+
+        `;
+
+    });
 
 }
 
-function renderUsuarios(){
+async function crearUsuario(){
 
-let tabla=document.getElementById("tablaUsuarios");
-tabla.innerHTML="";
+    const nombre =
+    document.getElementById("nombre").value;
 
-let admin=0;
-let vendedor=0;
-let inventario=0;
-let activos=0;
+    const email =
+    document.getElementById("email").value;
 
-usuarios.forEach(u=>{
+    const rol =
+    document.getElementById("rol").value;
 
-if(u.rol==="Administrador") admin++;
-if(u.rol==="Vendedor") vendedor++;
-if(u.rol==="Inventario") inventario++;
-if(u.estado==="Activo") activos++;
+    if(
+        nombre=="" ||
+        email=="" ||
+        rol==""
+    ){
 
-tabla.innerHTML+=`
+        alert("Complete todos los campos");
 
-<tr>
+        return;
 
-<td>${u.id}</td>
-<td>${u.nombre}</td>
-<td>${u.email}</td>
+    }
 
-<td>
-<span class="badge badge-${u.rol.toLowerCase()}">
-${u.rol}
-</span>
-</td>
+    const respuesta =
+    await fetch(
 
-<td class="${u.estado==="Activo"?"estado-activo":"estado-inactivo"}">
-${u.estado}
-</td>
+        "http://localhost:3000/usuarios",
 
-<td>
+        {
 
-<button class="btn-small btn-toggle" onclick="toggleEstado(${u.id})">
-Activar/Desactivar
-</button>
+            method:"POST",
 
-<button class="btn-small btn-delete" onclick="eliminarUsuario(${u.id})">
-Eliminar
-</button>
+            headers:{
 
-</td>
+                "Content-Type":"application/json"
 
-</tr>
+            },
 
-`;
+            body:JSON.stringify({
 
-});
+                nombre,
 
-document.getElementById("countAdmin").innerText=admin;
-document.getElementById("countVendedor").innerText=vendedor;
-document.getElementById("countInventario").innerText=inventario;
-document.getElementById("countActivos").innerText=activos;
+                correo:email,
+
+                rol
+
+            })
+
+        }
+
+    );
+
+    const resultado =
+    await respuesta.json();
+
+    alert(
+
+        resultado.mensaje ||
+
+        resultado.error
+
+    );
+
+    cerrarModal();
+
+    document.getElementById("nombre").value="";
+    document.getElementById("email").value="";
+
+    cargarUsuarios();
+
+}
+
+async function cargarUsuarios(){
+
+    const respuesta =
+    await fetch(
+        "http://localhost:3000/usuarios"
+    );
+
+    usuarios =
+    await respuesta.json();
+
+    const tabla =
+    document.getElementById("tablaUsuarios");
+
+    tabla.innerHTML="";
+
+    let admin=0;
+    let vendedor=0;
+    let inventario=0;
+
+    usuarios.forEach(u=>{
+
+        if(u.nombre_rol=="Administrador") admin++;
+
+        if(u.nombre_rol=="Vendedor") vendedor++;
+
+        if(u.nombre_rol=="Inventario") inventario++;
+
+        tabla.innerHTML += `
+
+        <tr>
+
+        <td>${u.id_usuario}</td>
+
+        <td>${u.nombre_usuario}</td>
+
+        <td>${u.correo}</td>
+
+        <td>
+
+        <span class="badge">
+
+        ${u.nombre_rol}
+
+        </span>
+
+        </td>
+
+        <td class="estado-activo">
+
+        Activo
+
+        </td>
+
+        <td>
+
+        -
+
+        </td>
+
+        </tr>
+
+        `;
+
+    });
+
+    document.getElementById("countAdmin").innerText=admin;
+
+    document.getElementById("countVendedor").innerText=vendedor;
+
+    document.getElementById("countInventario").innerText=inventario;
+
+    document.getElementById("countActivos").innerText=usuarios.length;
 
 }
 
@@ -400,7 +495,6 @@ u.estado=u.estado==="Activo"?"Inactivo":"Activo";
 return u;
 });
 
-localStorage.setItem("usuarios",JSON.stringify(usuarios));
 renderUsuarios();
 
 }
@@ -411,7 +505,6 @@ if(confirm("Eliminar usuario?")){
 
 usuarios=usuarios.filter(u=>u.id!==id);
 
-localStorage.setItem("usuarios",JSON.stringify(usuarios));
 
 renderUsuarios();
 
@@ -467,7 +560,9 @@ Eliminar
 
 }
 
-renderUsuarios();
+cargarRoles();
+
+cargarUsuarios();
 
 </script>
 

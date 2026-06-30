@@ -115,6 +115,40 @@ app.get("/categorias", (req, res) => {
         res.json(result);
     });
 });
+// OBTENER ROLES
+// ==========================================
+
+app.get("/roles",(req,res)=>{
+
+    const sql=`
+
+    SELECT *
+
+    FROM Rol
+
+    ORDER BY nombre_rol
+
+    `;
+
+    db.query(sql,(err,result)=>{
+
+        if(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                error:"Error obteniendo roles"
+
+            });
+
+        }
+
+        res.json(result);
+
+    });
+
+});
 // Endpoint encargado de registrar nuevas categorías
 
 app.post("/categorias", (req,res)=>{
@@ -306,6 +340,413 @@ app.post("/proveedores",(req,res)=>{
             res.json({
 
                 mensaje:"Proveedor registrado correctamente"
+
+            });
+
+        }
+
+    );
+
+});
+// REGISTRAR UNA VENTA COMPLETA
+// =====================================================
+
+app.post("/ventas/completa", (req, res) => {
+
+    const { cliente, usuario, productos } = req.body;
+
+    if (!cliente || !usuario || !productos || productos.length === 0) {
+        return res.status(400).json({
+            error: "Información incompleta"
+        });
+    }
+
+    db.beginTransaction(err => {
+
+        if (err) {
+            return res.status(500).json(err);
+        }
+
+        const sqlVenta = `
+        INSERT INTO Venta
+        (fecha_venta,id_cliente,id_usuario)
+        VALUES (CURDATE(),?,?)
+        `;
+
+        db.query(
+            sqlVenta,
+            [cliente, usuario],
+            (err, ventaResult) => {
+
+                if (err) {
+                    return db.rollback(() => {
+                        res.status(500).json(err);
+                    });
+                }
+
+                const idVenta = ventaResult.insertId;
+
+                let pendientes = productos.length;
+
+                productos.forEach(producto => {
+
+                    const subtotal =
+                        producto.cantidad *
+                        producto.precio;
+
+                    const sqlDetalle = `
+                    INSERT INTO Detalle_Venta
+                    (
+                        id_venta,
+                        id_producto,
+                        cantidad,
+                        precio_unitario,
+                        subtotal
+                    )
+                    VALUES (?,?,?,?,?)
+                    `;
+
+                    db.query(
+
+                        sqlDetalle,
+
+                        [
+                            idVenta,
+                            producto.id_producto,
+                            producto.cantidad,
+                            producto.precio,
+                            subtotal
+                        ],
+
+                        err => {
+
+                            if (err) {
+
+                                return db.rollback(() => {
+                                    res.status(500).json(err);
+                                });
+
+                            }
+
+                            pendientes--;
+
+                            if (pendientes === 0) {
+
+                                db.commit(err => {
+
+                                    if (err) {
+
+                                        return db.rollback(() => {
+                                            res.status(500).json(err);
+                                        });
+
+                                    }
+
+                                    res.json({
+                                        mensaje:
+                                        "Venta registrada correctamente"
+                                    });
+
+                                });
+
+                            }
+
+                        }
+
+                    );
+
+                });
+
+            }
+
+        );
+
+    });
+
+});
+// Endpoint para registrar una compra completa
+app.post("/compras/completa", (req, res) => {
+
+    const { proveedor, usuario, productos } = req.body;
+
+    if (!proveedor || !usuario || !productos || productos.length === 0) {
+
+        return res.status(400).json({
+            error: "Datos incompletos"
+        });
+
+    }
+
+    let totalCompra = 0;
+
+    productos.forEach(p => {
+
+        totalCompra += Number(p.precio) * Number(p.cantidad);
+
+    });
+
+    db.beginTransaction(err => {
+
+        if (err) {
+
+            return res.status(500).json({
+                error: "Error iniciando transacción"
+            });
+
+        }
+
+        const sqlCompra = `
+        INSERT INTO Compra
+        (fecha_compra,id_proveedor,id_usuario,total_compra)
+        VALUES (CURDATE(),?,?,?)
+        `;
+
+        db.query(
+            sqlCompra,
+            [proveedor, usuario, totalCompra],
+            (err, resultadoCompra) => {
+
+                if (err) {
+
+                    return db.rollback(() => {
+
+                        console.error("ERROR INSERT COMPRA");
+                        console.error(err);
+
+                        res.status(500).json({
+
+                            error: "Error registrando compra",
+
+                            detalle: err.sqlMessage
+
+                        });
+
+                    });
+
+                }
+
+                const idCompra = resultadoCompra.insertId;
+
+                const sqlDetalle = `
+                INSERT INTO Detalle_Compra
+                (
+                id_compra,
+                id_producto,
+                cantidad,
+                precio_unitario,
+                subtotal_compra,
+                total_compra
+                )
+                VALUES (?,?,?,?,?,?)
+                `;
+
+                let pendientes = productos.length;
+
+                productos.forEach(p => {
+
+                    const subtotal =
+                        Number(p.precio) *
+                        Number(p.cantidad);
+
+                    db.query(
+
+                        sqlDetalle,
+
+                        [
+
+                            idCompra,
+
+                            p.id_producto,
+
+                            p.cantidad,
+
+                            p.precio,
+
+                            subtotal,
+
+                            subtotal
+
+                        ],
+
+                        err => {
+
+                            if (err) {
+
+                                return db.rollback(() => {
+
+                                    console.error(err);
+
+                                    res.status(500).json({
+
+                                        error: "Error registrando detalle"
+
+                                    });
+
+                                });
+
+                            }
+
+                            pendientes--;
+
+                            if (pendientes === 0) {
+
+                                db.commit(err => {
+
+                                    if (err) {
+
+                                        return db.rollback(() => {
+
+                                            res.status(500).json({
+
+                                                error: "Error al confirmar compra"
+
+                                            });
+
+                                        });
+
+                                    }
+
+                                    res.json({
+
+                                        mensaje:
+                                        "Compra registrada correctamente"
+
+                                    });
+
+                                });
+
+                            }
+
+                        }
+
+                    );
+
+                });
+
+            }
+
+        );
+
+    });
+
+});
+
+// OBTENER USUARIOS
+// ==========================================
+
+app.get("/usuarios",(req,res)=>{
+
+    const sql=`
+
+    SELECT
+
+        u.id_usuario,
+        u.nombre_usuario,
+        u.correo,
+        r.nombre_rol
+
+    FROM Usuario u
+
+    INNER JOIN Rol r
+
+    ON u.id_rol=r.id_rol
+
+    ORDER BY u.id_usuario
+
+    `;
+
+    db.query(sql,(err,result)=>{
+
+        if(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+                error:"Error obteniendo usuarios"
+            });
+
+        }
+
+        res.json(result);
+
+    });
+
+});
+// REGISTRAR USUARIO
+// ==========================================
+
+app.post("/usuarios",(req,res)=>{
+
+    const{
+
+        nombre,
+        correo,
+        rol
+
+    }=req.body;
+
+    if(!nombre || !correo || !rol){
+
+        return res.status(400).json({
+            error:"Datos incompletos"
+        });
+
+    }
+
+    const sql=`
+
+    INSERT INTO Usuario
+
+    (
+
+        nombre_usuario,
+        correo,
+        contrasena_hash,
+        id_rol
+
+    )
+
+    VALUES
+
+    (?,?,?,?)
+
+    `;
+
+    db.query(
+
+        sql,
+
+        [
+
+            nombre,
+
+            correo,
+
+            '123456',
+
+            rol
+
+        ],
+
+        (err,result)=>{
+
+            if(err){
+
+                console.error(err);
+
+                return res.status(500).json({
+
+                    error:"Error registrando usuario",
+
+                    detalle:err.sqlMessage
+
+                });
+
+            }
+
+            res.json({
+
+                mensaje:"Usuario registrado correctamente"
 
             });
 

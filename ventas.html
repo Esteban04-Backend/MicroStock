@@ -212,29 +212,60 @@ FINALIZAR VENTA
 
 <script>
 
-let carrito=[]
-let productos=JSON.parse(localStorage.getItem("productos"))||[]
+let carrito=[];
+let productos=[];
+let clientes = [];
 
-function cargarProductos(){
+async function cargarProductos(){
 
-let grid=document.getElementById("listaProductos")
-let selector=document.getElementById("productoSeleccion")
+    const respuesta = await fetch("http://localhost:3000/productos");
 
-grid.innerHTML=""
-selector.innerHTML="<option value=''>Seleccionar producto</option>"
+    productos = await respuesta.json();
+    const respuestaClientes =await fetch("http://localhost:3000/clientes");
 
-productos.forEach((p,i)=>{
+    clientes =await respuestaClientes.json();
 
-selector.innerHTML+=`<option value="${i}">${p.nombre}</option>`
+    let grid = document.getElementById("listaProductos");
+    let selector = document.getElementById("productoSeleccion");
+    let selectorCliente =document.getElementById("clienteVenta");
 
-let card=document.createElement("div")
-card.className="product-card"
-card.innerHTML=`<strong>${p.nombre}</strong><br>$${p.precio}`
-card.onclick=()=>agregarCarrito(p,1)
+    grid.innerHTML = "";
+    selector.innerHTML =
+    "<option value=''>Seleccionar producto</option>";
+    selectorCliente.innerHTML ="<option value=''>Seleccione un cliente</option>";
 
-grid.appendChild(card)
+    productos.forEach((p,i)=>{
 
-})
+        selector.innerHTML += `
+        <option value="${i}">
+            ${p.nombre_producto}
+        </option>
+        `;
+
+        let card = document.createElement("div");
+
+        card.className = "product-card";
+
+        card.innerHTML = `
+        <strong>${p.nombre_producto}</strong>
+        <br>
+        $${p.precio_unitario}
+        `;
+
+        card.onclick = ()=>agregarCarrito(p,1);
+
+        grid.appendChild(card);
+
+    });
+    clientes.forEach(c=>{
+
+    selectorCliente.innerHTML += `
+        <option value="${c.id_cliente}">
+            ${c.nombre_cliente}
+        </option>
+    `;
+
+    });
 
 }
 
@@ -258,7 +289,9 @@ agregarCarrito(producto,cantidad)
 
 function agregarCarrito(producto,cantidad){
 
-let item=carrito.find(p=>p.nombre==producto.nombre)
+let item = carrito.find(
+    p => p.id_producto === producto.id_producto
+);
 
 if(item){
 
@@ -268,9 +301,10 @@ item.cantidad+=cantidad
 
 carrito.push({
 
-nombre:producto.nombre,
-precio:producto.precio,
-cantidad:cantidad
+id_producto: producto.id_producto,
+nombre: producto.nombre_producto,
+precio: Number(producto.precio_unitario),
+cantidad: cantidad
 
 })
 
@@ -307,32 +341,74 @@ document.getElementById("total").innerText=total
 
 }
 
-function finalizarVenta(){
+async function finalizarVenta(){
 
-if(carrito.length==0){
+    if(carrito.length==0){
 
-alert("Debe agregar productos")
-return
+        alert("Debe agregar productos");
+        return;
 
-}
+    }
 
-let ventas=JSON.parse(localStorage.getItem("ventas"))||[]
+    const cliente = document
+        .getElementById("clienteVenta")
+        .value;
 
-ventas.push({
+        if(cliente===""){
 
-fecha:new Date(),
-productos:carrito,
-total:document.getElementById("total").innerText
+            alert("Seleccione un cliente");
 
-})
+            return;
 
-localStorage.setItem("ventas",JSON.stringify(ventas))
+        }
 
-alert("Venta registrada")
+        const datos = {
 
-carrito=[]
+            cliente:Number(cliente),
+            usuario:1,
+            productos:carrito
 
-actualizarCarrito()
+    };
+
+    const respuesta = await fetch(
+
+        "http://localhost:3000/ventas/completa",
+
+        {
+
+            method:"POST",
+
+            headers:{
+
+                "Content-Type":"application/json"
+
+            },
+
+            body:JSON.stringify(datos)
+
+        }
+
+    );
+
+    const resultado = await respuesta.json();
+
+    if(respuesta.ok){
+
+        alert(resultado.mensaje);
+
+        carrito=[];
+
+        actualizarCarrito();
+
+        cargarProductos();
+
+    }
+
+    else{
+
+        alert(resultado.error);
+
+    }
 
 }
 
@@ -340,7 +416,13 @@ function buscarProducto(){
 
 let texto=document.getElementById("buscarProducto").value.toLowerCase()
 
-let filtrados=productos.filter(p=>p.nombre.toLowerCase().includes(texto))
+let filtrados = productos.filter(p=>
+
+p.nombre_producto
+.toLowerCase()
+.includes(texto)
+
+)
 
 let grid=document.getElementById("listaProductos")
 
@@ -350,7 +432,11 @@ filtrados.forEach(p=>{
 
 let card=document.createElement("div")
 card.className="product-card"
-card.innerHTML=`<strong>${p.nombre}</strong><br>$${p.precio}`
+card.innerHTML=`
+<strong>${p.nombre_producto}</strong>
+<br>
+$${p.precio_unitario}
+`
 card.onclick=()=>agregarCarrito(p,1)
 
 grid.appendChild(card)
