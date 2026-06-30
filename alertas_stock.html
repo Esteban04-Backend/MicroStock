@@ -152,42 +152,96 @@ margin-right:4px;
 
 <script>
 
-let inventario = JSON.parse(localStorage.getItem("inventario")) || [];
-let alertas = JSON.parse(localStorage.getItem("alertas")) || [];
+let alertas = [];
+async function cargarAlertas(){
 
-function generarAlertas(){
+    const respuesta =
+    await fetch("http://localhost:3000/alertas");
 
-alertas=[];
+    alertas =
+    await respuesta.json();
 
-inventario.forEach(p=>{
+    let tabla =
+    document.getElementById("tablaAlertas");
 
-if(p.stock <= p.minimo){
+    tabla.innerHTML="";
 
-let prioridad="Bajo";
+    let criticos=0;
+    let bajos=0;
 
-if(p.stock <= p.minimo * 0.5){
-prioridad="Crítico";
-}
+    alertas.forEach((a,index)=>{
 
-alertas.push({
-producto:p.nombre,
-stock:p.stock,
-minimo:p.minimo,
-prioridad:prioridad,
-estado:"Pendiente"
-});
+        if(a.prioridad==="Crítico") criticos++;
+        else bajos++;
 
-}
+        tabla.innerHTML+=`
 
-});
+        <tr>
 
-localStorage.setItem("alertas",JSON.stringify(alertas));
+            <td>${a.nombre_producto}</td>
+
+            <td>${a.stock_actual}</td>
+
+            <td>${a.stock_minimo}</td>
+
+            <td>
+
+                <span class="badge ${
+                    a.prioridad==="Crítico"
+                    ? "critico"
+                    : "bajo"
+                }">
+
+                ${a.prioridad}
+
+                </span>
+
+            </td>
+
+            <td>
+
+                <span class="estado-pendiente">
+
+                Pendiente
+
+                </span>
+
+            </td>
+
+            <td>
+
+                <button
+                class="btn btn-reponer"
+                onclick="reponerStock(${a.id_producto})">
+
+                Reponer
+
+                </button>
+
+                <button
+                class="btn btn-minimo"
+                onclick="editarMinimo(${a.id_producto})">
+
+                Nuevo mínimo
+
+                </button>
+
+            </td>
+
+        </tr>
+
+        `;
+
+    });
+
+    document.getElementById("criticos").innerText=criticos;
+    document.getElementById("bajos").innerText=bajos;
+
+    crearGrafico(criticos,bajos);
 
 }
 
 function renderAlertas(){
-
-generarAlertas();
 
 let tabla=document.getElementById("tablaAlertas");
 
@@ -223,12 +277,12 @@ ${a.estado}
 <td>
 
 <button class="btn btn-reponer"
-onclick="reponerStock('${a.producto}')">
+onclick="reponerStock(${a.id_producto})"
 Reponer
 </button>
 
 <button class="btn btn-minimo"
-onclick="editarMinimo('${a.producto}')">
+onclick="editarMinimo(${a.id_producto})"
 Nuevo mínimo
 </button>
 
@@ -276,77 +330,89 @@ datasets:[{data:[criticos,bajos]}]
 
 }
 
-function reponerStock(nombre){
+async function reponerStock(id){
 
-let cantidad = prompt("Cantidad a agregar:");
+    let cantidad =
+    prompt("Cantidad a agregar:");
 
-inventario = inventario.map(p=>{
+    if(cantidad===null) return;
 
-if(p.nombre === nombre){
-p.stock += parseInt(cantidad);
-}
+    cantidad=Number(cantidad);
 
-return p;
+    if(cantidad<=0){
 
-});
+        alert("Cantidad inválida");
 
-localStorage.setItem("inventario",JSON.stringify(inventario));
+        return;
 
-renderAlertas();
+    }
 
-}
+    const respuesta =
+    await fetch(
 
-function editarMinimo(nombre){
+        "http://localhost:3000/productos/"+id+"/reponer",
 
-let nuevo = prompt("Nuevo stock mínimo:");
+        {
 
-inventario = inventario.map(p=>{
+            method:"PUT",
 
-if(p.nombre === nombre){
-p.minimo = parseInt(nuevo);
-}
+            headers:{
+                "Content-Type":"application/json"
+            },
 
-return p;
+            body:JSON.stringify({
 
-});
+                cantidad
 
-localStorage.setItem("inventario",JSON.stringify(inventario));
+            })
 
-renderAlertas();
+        }
 
-}
+    );
 
-function marcarRevisado(index){
+    const data =
+    await respuesta.json();
 
-alertas[index].estado="Revisado";
+    alert(data.mensaje);
 
-localStorage.setItem("alertas",JSON.stringify(alertas));
-
-renderAlertas();
-
-}
-
-function ignorarAlerta(index){
-
-alertas[index].estado="Ignorado";
-
-localStorage.setItem("alertas",JSON.stringify(alertas));
-
-renderAlertas();
+    cargarAlertas();
 
 }
 
-function eliminarAlerta(index){
+async function editarMinimo(id){
 
-alertas.splice(index,1);
+    let nuevo = prompt("Nuevo stock mínimo:");
 
-localStorage.setItem("alertas",JSON.stringify(alertas));
+    if(nuevo===null) return;
 
-renderAlertas();
+    await fetch(
+
+        "http://localhost:3000/productos/minimo/"+id,
+
+        {
+
+            method:"PUT",
+
+            headers:{
+                "Content-Type":"application/json"
+            },
+
+            body:JSON.stringify({
+
+                minimo:Number(nuevo)
+
+            })
+
+        }
+
+    );
+
+    cargarAlertas();
+    
 
 }
 
-renderAlertas();
+cargarAlertas();
 
 </script>
 

@@ -1117,3 +1117,201 @@ app.get("/movimientos", (req, res) => {
     });
 
 });
+// OBTENER ALERTAS DE STOCK
+// ==========================================
+
+app.get("/alertas", (req, res) => {
+
+    const sql = `
+
+    SELECT
+
+        id_producto,
+        nombre_producto,
+        stock_actual,
+        stock_minimo,
+
+        CASE
+
+            WHEN stock_actual <= stock_minimo * 0.5
+                THEN 'Crítico'
+
+            ELSE 'Bajo'
+
+        END AS prioridad
+
+    FROM Producto
+
+    WHERE stock_actual <= stock_minimo
+
+    ORDER BY stock_actual ASC
+
+    `;
+
+    db.query(sql,(err,result)=>{
+
+        if(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                error:"Error obteniendo alertas"
+
+            });
+
+        }
+
+        res.json(result);
+
+    });
+
+});
+// ACTUALIZAR STOCK MÍNIMO
+// ==========================================
+
+app.put("/productos/minimo/:id",(req,res)=>{
+
+    const id=req.params.id;
+
+    const { minimo }=req.body;
+
+    const sql=`
+
+    UPDATE Producto
+
+    SET stock_minimo=?
+
+    WHERE id_producto=?
+
+    `;
+
+    db.query(
+
+        sql,
+
+        [
+
+            minimo,
+
+            id
+
+        ],
+
+        (err,result)=>{
+
+            if(err){
+
+                console.error(err);
+
+                return res.status(500).json({
+
+                    error:"Error actualizando stock mínimo"
+
+                });
+
+            }
+
+            res.json({
+
+                mensaje:"Stock mínimo actualizado"
+
+            });
+
+        }
+
+    );
+
+});
+// REPONER STOCK
+// ==========================================
+
+app.put("/productos/:id/reponer",(req,res)=>{
+
+    const id = req.params.id;
+    const { cantidad } = req.body;
+
+    const sqlActualizar = `
+        UPDATE Producto
+        SET stock_actual = stock_actual + ?
+        WHERE id_producto = ?
+    `;
+
+    db.query(
+
+        sqlActualizar,
+
+        [cantidad,id],
+
+        (err)=>{
+
+            if(err){
+
+                console.error(err);
+
+                return res.status(500).json({
+                    error:"Error actualizando stock"
+                });
+
+            }
+
+            const sqlMovimiento = `
+                INSERT INTO Movimiento_Inventario
+                (
+                    id_producto,
+                    fecha_movimiento,
+                    tipo_movimiento,
+                    cantidad,
+                    referencia_tipo,
+                    observaciones
+                )
+                VALUES
+                (
+                    ?,
+                    NOW(),
+                    'entrada',
+                    ?,
+                    'Reposición Manual',
+                    'Reposición realizada desde Alertas'
+                )
+            `;
+
+            db.query(
+
+                sqlMovimiento,
+
+                [
+
+                    id,
+
+                    cantidad
+
+                ],
+
+                (err)=>{
+
+                    if(err){
+
+                        console.error(err);
+
+                        return res.status(500).json({
+                            error:"Error registrando movimiento"
+                        });
+
+                    }
+
+                    res.json({
+
+                        mensaje:"Stock actualizado correctamente"
+
+                    });
+
+                }
+
+            );
+
+        }
+
+    );
+
+});
