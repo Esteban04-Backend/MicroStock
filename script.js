@@ -56,6 +56,13 @@ document.addEventListener("DOMContentLoaded", () => {
         mostrarProveedores();
 
     }
+    // DASHBOARD
+
+    if(document.getElementById("totalProductos")){
+
+        cargarDashboard();
+
+    }
 });
 // definimos la funcion para ppoder cargar las categorias
 async function cargarCategorias(){
@@ -446,3 +453,79 @@ async function mostrarProveedores(){
     });
 
 }
+// DASHBOARD
+// ======================================
+
+async function cargarDashboard(){
+
+    try{
+
+        const respuesta = await fetch(
+            "http://localhost:3000/dashboard"
+        );
+
+        const datos = await respuesta.json();
+
+        const totalProductos =
+        document.getElementById("totalProductos");
+
+        const totalAlertas =
+        document.getElementById("totalAlertas");
+
+        const totalMovimientos =
+        document.getElementById("totalMovimientos");
+
+        if(totalProductos){
+
+            totalProductos.innerText =
+            datos.totalProductos;
+
+        }
+
+        if(totalAlertas){
+
+            totalAlertas.innerText =
+            datos.totalAlertas;
+
+        }
+
+        if(totalMovimientos){
+
+            totalMovimientos.innerText =
+            datos.totalMovimientos;
+
+        }
+
+    }
+
+    catch(error){
+
+        console.error(
+            "Error cargando Dashboard:",
+            error
+        );
+
+    }
+
+}
+
+
+// ======================================
+// INICIALIZACIÓN
+// ======================================
+
+document.addEventListener(
+
+    "DOMContentLoaded",
+
+    ()=>{
+
+        if(document.getElementById("totalProductos")){
+
+            cargarDashboard();
+
+        }
+
+    }
+
+);

@@ -1315,3 +1315,136 @@ app.put("/productos/:id/reponer",(req,res)=>{
     );
 
 });
+// DASHBOARD
+// ==========================================
+
+app.get("/dashboard",(req,res)=>{
+
+    const dashboard={};
+
+    const sqlProductos=`
+
+        SELECT COUNT(*) AS total
+
+        FROM Producto
+
+    `;
+
+    const sqlAlertas=`
+
+        SELECT COUNT(*) AS total
+
+        FROM Producto
+
+        WHERE stock_actual<=stock_minimo
+
+    `;
+
+    const sqlMovimientos=`
+
+        SELECT COUNT(*) AS total
+
+        FROM Movimiento_Inventario
+
+    `;
+
+    db.query(sqlProductos,(err,productos)=>{
+
+        if(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+
+                error:"Error obteniendo productos"
+
+            });
+
+        }
+
+        dashboard.totalProductos=productos[0].total;
+
+        db.query(sqlAlertas,(err,alertas)=>{
+
+            if(err){
+
+                console.error(err);
+
+                return res.status(500).json({
+
+                    error:"Error obteniendo alertas"
+
+                });
+
+            }
+
+            dashboard.totalAlertas=alertas[0].total;
+
+            db.query(sqlMovimientos,(err,movimientos)=>{
+
+                if(err){
+
+                    console.error(err);
+
+                    return res.status(500).json({
+
+                        error:"Error obteniendo movimientos"
+
+                    });
+
+                }
+
+                dashboard.totalMovimientos=movimientos[0].total;
+
+                res.json(dashboard);
+
+            });
+
+        });
+
+    });
+
+});
+
+// DASHBOARD
+// ==========================================
+
+async function cargarDashboard(){
+
+    const respuesta=
+    await fetch("http://localhost:3000/dashboard");
+
+    const datos=
+    await respuesta.json();
+
+    const productos=
+    document.getElementById("totalProductos");
+
+    if(productos){
+
+        productos.innerText=
+        datos.totalProductos;
+
+    }
+
+    const alertas=
+    document.getElementById("totalAlertas");
+
+    if(alertas){
+
+        alertas.innerText=
+        datos.totalAlertas;
+
+    }
+
+    const movimientos=
+    document.getElementById("totalMovimientos");
+
+    if(movimientos){
+
+        movimientos.innerText=
+        datos.totalMovimientos;
+
+    }
+
+}
