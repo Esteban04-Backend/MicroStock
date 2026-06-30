@@ -28,7 +28,34 @@ document.addEventListener("DOMContentLoaded", () => {
     );
 
     mostrarCategorias();
-}
+    }
+    // CLIENTES
+    if(document.getElementById("formCliente")){
+
+        document
+        .getElementById("formCliente")
+        .addEventListener(
+            "submit",
+            registrarCliente
+        );
+
+        mostrarClientes();
+
+    }
+
+    // PROVEEDORES
+    if(document.getElementById("formProveedor")){
+
+        document
+        .getElementById("formProveedor")
+        .addEventListener(
+            "submit",
+            registrarProveedor
+        );
+
+        mostrarProveedores();
+
+    }
 });
 // definimos la funcion para ppoder cargar las categorias
 async function cargarCategorias(){
@@ -224,6 +251,196 @@ async function mostrarCategorias(){
             <td>${c.descripcion_categoria}</td>
             <td>Activa</td>
         </tr>
+        `;
+
+    });
+
+}
+// CLIENTES
+// ===============================
+
+// Registrar cliente
+async function registrarCliente(e){
+
+    e.preventDefault();
+
+    const nombre =
+    document.getElementById("nombreCliente").value;
+
+    const telefono =
+    document.getElementById("telefonoCliente").value;
+
+    const correo =
+    document.getElementById("correoCliente").value;
+
+    const direccion =
+    document.getElementById("direccionCliente").value;
+
+    const respuesta =
+    await fetch(
+        "http://localhost:3000/clientes",
+        {
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+                nombre,
+                telefono,
+                correo,
+                direccion
+            })
+        }
+    );
+
+    const data =
+    await respuesta.json();
+
+    alert(data.mensaje);
+
+    document
+    .getElementById("formCliente")
+    .reset();
+
+    mostrarClientes();
+
+}
+
+// Mostrar clientes
+
+async function mostrarClientes(){
+
+    const respuesta =
+    await fetch(
+        "http://localhost:3000/clientes"
+    );
+
+    const clientes =
+    await respuesta.json();
+
+    const tabla =
+    document.querySelector(
+        "#tablaClientes tbody"
+    );
+
+    if(!tabla) return;
+
+    tabla.innerHTML="";
+
+    clientes.forEach(c=>{
+
+        tabla.innerHTML += `
+
+        <tr>
+
+            <td>${c.id_cliente}</td>
+
+            <td>${c.nombre_cliente}</td>
+
+            <td>${c.telefono}</td>
+
+            <td>${c.correo}</td>
+
+            <td>${c.direccion}</td>
+
+            <td>Activo</td>
+
+        </tr>
+
+        `;
+
+    });
+
+}
+// Registrar proveedor
+
+async function registrarProveedor(e){
+
+    e.preventDefault();
+
+    const nombre =
+    document.getElementById("nombreProveedor").value;
+
+    const telefono =
+    document.getElementById("telefonoProveedor").value;
+
+    const correo =
+    document.getElementById("correoProveedor").value;
+
+    const direccion =
+    document.getElementById("direccionProveedor").value;
+
+    const respuesta =
+    await fetch(
+        "http://localhost:3000/proveedores",
+        {
+            method:"POST",
+            headers:{
+                "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+                nombre,
+                telefono,
+                correo,
+                direccion
+            })
+        }
+    );
+
+    const data =
+    await respuesta.json();
+
+    alert(data.mensaje);
+
+    document
+    .getElementById("formProveedor")
+    .reset();
+
+    mostrarProveedores();
+
+}
+
+// Mostrar proveedores
+
+async function mostrarProveedores(){
+
+    const respuesta =
+    await fetch(
+        "http://localhost:3000/proveedores"
+    );
+
+    const proveedores =
+    await respuesta.json();
+
+    const tabla =
+    document.querySelector(
+        "#tablaProveedores tbody"
+    );
+
+    if(!tabla) return;
+
+    tabla.innerHTML="";
+
+    proveedores.forEach(p=>{
+
+        tabla.innerHTML += `
+
+        <tr>
+
+            <td>${p.id_proveedor}</td>
+
+            <td>${p.nombre_proveedor}</td>
+
+            <td>${p.telefono}</td>
+
+            <td>${p.correo}</td>
+
+            <td>${p.direccion}</td>
+
+            <td>Activo</td>
+
+        </tr>
+
         `;
 
     });

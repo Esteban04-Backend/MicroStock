@@ -143,3 +143,174 @@ app.post("/categorias", (req,res)=>{
     });
 
 });
+// Obtener todos los clientes
+app.get("/clientes", (req, res) => {
+
+    const sql = `
+        SELECT *
+        FROM Cliente
+    `;
+
+    db.query(sql, (err, result) => {
+
+        if(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+                error:"Error al obtener clientes"
+            });
+
+        }
+
+        res.json(result);
+
+    });
+
+});
+// Registrar cliente
+app.post("/clientes", (req, res) => {
+
+    const {
+        nombre,
+        telefono,
+        correo,
+        direccion
+    } = req.body;
+
+    const sql = `
+        INSERT INTO Cliente
+        (
+            nombre_cliente,
+            telefono,
+            correo,
+            direccion
+        )
+        VALUES
+        (?,?,?,?)
+    `;
+
+    db.query(
+
+        sql,
+
+        [
+            nombre,
+            telefono,
+            correo,
+            direccion
+        ],
+
+        (err,result)=>{
+
+            if(err){
+
+                console.error(err);
+
+                return res.status(500).json({
+                    error:"Error al guardar cliente"
+                });
+
+            }
+
+            res.json({
+                mensaje:"Cliente registrado correctamente"
+            });
+
+        }
+
+    );
+
+});
+
+// Obtener proveedores
+app.get("/proveedores", (req,res)=>{
+
+    const sql="SELECT * FROM Proveedor";
+
+    db.query(sql,(err,result)=>{
+
+        if(err){
+
+            console.error(err);
+
+            return res.status(500).json({
+                error:"Error al obtener proveedores"
+            });
+
+        }
+
+        res.json(result);
+
+    });
+
+});
+// Registrar proveedor
+app.post("/proveedores",(req,res)=>{
+
+    const {
+
+        nombre,
+        telefono,
+        correo,
+        direccion
+
+    } = req.body;
+
+    const sql=`
+
+    INSERT INTO Proveedor
+
+    (
+
+        nombre_proveedor,
+        telefono,
+        correo,
+        direccion
+
+    )
+
+    VALUES
+
+    (?,?,?,?)
+
+    `;
+
+    db.query(
+
+        sql,
+
+        [
+
+            nombre,
+            telefono,
+            correo,
+            direccion
+
+        ],
+
+        (err,result)=>{
+
+            if(err){
+
+                console.error(err);
+
+                return res.status(500).json({
+
+                    error:"Error al guardar proveedor"
+
+                });
+
+            }
+
+            res.json({
+
+                mensaje:"Proveedor registrado correctamente"
+
+            });
+
+        }
+
+    );
+
+});
