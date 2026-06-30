@@ -168,7 +168,18 @@ onkeyup="filtrarMovimientos()"
 
 <script>
 
-let movimientos = JSON.parse(localStorage.getItem("movimientos")) || [];
+let movimientos = [];
+async function cargarMovimientos(){
+
+    const respuesta =
+    await fetch("http://localhost:3000/movimientos");
+
+    movimientos =
+    await respuesta.json();
+
+    renderMovimientos();
+
+}
 
 function renderMovimientos(lista=movimientos){
 
@@ -180,18 +191,33 @@ let salidas=0;
 
 lista.forEach(m=>{
 
-if(m.tipo==="Entrada") entradas+=m.cantidad;
-if(m.tipo==="Salida") salidas+=m.cantidad;
+if(m.tipo_movimiento==="entrada")
+    entradas+=m.cantidad;
 
-tabla.innerHTML+=`
+if(m.tipo_movimiento==="salida")
+    salidas+=m.cantidad;
+
+tabla.innerHTML += `
 
 <tr>
 
-<td>${m.fecha}</td>
-<td>${m.producto}</td>
-<td><span class="badge ${m.tipo.toLowerCase()}">${m.tipo}</span></td>
+<td>${new Date(m.fecha_movimiento).toLocaleString()}</td>
+
+<td>${m.nombre_producto}</td>
+
+<td>
+
+<span class="badge ${m.tipo_movimiento}">
+
+${m.tipo_movimiento.charAt(0).toUpperCase() + m.tipo_movimiento.slice(1)}
+
+</span>
+
+</td>
+
 <td>${m.cantidad}</td>
-<td>${m.usuario || "Sistema"}</td>
+
+<td>${m.referencia_tipo}</td>
 
 </tr>
 
@@ -224,18 +250,28 @@ function filtrarMovimientos(){
 let texto=document.getElementById("buscarMov").value.toLowerCase();
 let tipo=document.getElementById("filtroTipo").value;
 
-let filtrados=movimientos.filter(m=>
+let filtrados = movimientos.filter(m =>
 
-(m.producto.toLowerCase().includes(texto)) &&
-(tipo==="" || m.tipo===tipo)
+    m.nombre_producto.toLowerCase().includes(texto) &&
+
+    (
+
+        tipo === "" ||
+
+        m.tipo_movimiento === tipo.toLowerCase()
+
+    )
 
 );
 
 renderMovimientos(filtrados);
 
 }
+window.onload = () => {
 
-renderMovimientos();
+    cargarMovimientos();
+
+};
 
 </script>
 

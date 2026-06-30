@@ -348,7 +348,7 @@ app.post("/proveedores",(req,res)=>{
     );
 
 });
-// REGISTRAR UNA VENTA COMPLETA
+// REGISTRAR VENTA COMPLETA
 // =====================================================
 
 app.post("/ventas/completa", (req, res) => {
@@ -356,66 +356,141 @@ app.post("/ventas/completa", (req, res) => {
     const { cliente, usuario, productos } = req.body;
 
     if (!cliente || !usuario || !productos || productos.length === 0) {
+
         return res.status(400).json({
             error: "Información incompleta"
         });
+
     }
 
     db.beginTransaction(err => {
 
         if (err) {
-            return res.status(500).json(err);
+
+            return res.status(500).json({
+                error: "Error iniciando la transacción"
+            });
+
         }
 
         const sqlVenta = `
         INSERT INTO Venta
-        (fecha_venta,id_cliente,id_usuario)
-        VALUES (CURDATE(),?,?)
+        (
+            fecha_venta,
+            id_cliente,
+            id_usuario
+        )
+        VALUES
+        (
+            CURDATE(),
+            ?,
+            ?
+        )
         `;
 
         db.query(
+
             sqlVenta,
-            [cliente, usuario],
+
+            [
+
+                cliente,
+                usuario
+
+            ],
+
             (err, ventaResult) => {
 
                 if (err) {
+
                     return db.rollback(() => {
-                        res.status(500).json(err);
+
+                        console.error(err);
+
+                        res.status(500).json({
+
+                            error: "Error registrando la venta",
+
+                            detalle: err.sqlMessage
+
+                        });
+
                     });
+
                 }
 
                 const idVenta = ventaResult.insertId;
+
+                const sqlDetalle = `
+                INSERT INTO Detalle_Venta
+                (
+                    id_venta,
+                    id_producto,
+                    cantidad,
+                    precio_unitario,
+                    subtotal
+                )
+                VALUES
+                (
+                    ?,?,?,?,?
+                )
+                `;
+
+                const sqlActualizarStock = `
+                UPDATE Producto
+                SET stock_actual = stock_actual - ?
+                WHERE id_producto = ?
+                `;
+
+                const sqlMovimiento = `
+                INSERT INTO Movimiento_Inventario
+                (
+                    id_producto,
+                    fecha_movimiento,
+                    tipo_movimiento,
+                    cantidad,
+                    referencia_tipo,
+                    observaciones
+                )
+                VALUES
+                (
+                    ?,
+                    NOW(),
+                    'salida',
+                    ?,
+                    ?,
+                    ?
+                )
+                `;
 
                 let pendientes = productos.length;
 
                 productos.forEach(producto => {
 
                     const subtotal =
-                        producto.cantidad *
-                        producto.precio;
+                        Number(producto.cantidad) *
+                        Number(producto.precio);
 
-                    const sqlDetalle = `
-                    INSERT INTO Detalle_Venta
-                    (
-                        id_venta,
-                        id_producto,
-                        cantidad,
-                        precio_unitario,
-                        subtotal
-                    )
-                    VALUES (?,?,?,?,?)
-                    `;
+                    // ==========================================
+                    // REGISTRAR DETALLE DE VENTA
+                    // ==========================================
 
                     db.query(
 
                         sqlDetalle,
 
                         [
+
                             idVenta,
+
                             producto.id_producto,
+
                             producto.cantidad,
+
                             producto.precio,
+
                             subtotal
+
                         ],
 
                         err => {
@@ -423,33 +498,136 @@ app.post("/ventas/completa", (req, res) => {
                             if (err) {
 
                                 return db.rollback(() => {
-                                    res.status(500).json(err);
-                                });
 
-                            }
+                                    console.error(err);
 
-                            pendientes--;
+                                    res.status(500).json({
 
-                            if (pendientes === 0) {
+                                        error: "Error registrando detalle de venta",
 
-                                db.commit(err => {
+                                        detalle: err.sqlMessage
 
-                                    if (err) {
-
-                                        return db.rollback(() => {
-                                            res.status(500).json(err);
-                                        });
-
-                                    }
-
-                                    res.json({
-                                        mensaje:
-                                        "Venta registrada correctamente"
                                     });
 
                                 });
 
                             }
+
+                            // ==========================================
+                            // DESCONTAR STOCK
+                            // ==========================================
+
+                            db.query(
+
+                                sqlActualizarStock,
+
+                                [
+
+                                    producto.cantidad,
+
+                                    producto.id_producto
+
+                                ],
+
+                                err => {
+
+                                    if (err) {
+
+                                        return db.rollback(() => {
+
+                                            console.error(err);
+
+                                            res.status(500).json({
+
+                                                error: "Error actualizando el stock",
+
+                                                detalle: err.sqlMessage
+
+                                            });
+
+                                        });
+
+                                    }
+
+                                    // ==========================================
+                                    // REGISTRAR MOVIMIENTO
+                                    // ==========================================
+
+                                    db.query(
+
+                                        sqlMovimiento,
+
+                                        [
+
+                                            producto.id_producto,
+
+                                            producto.cantidad,
+
+                                            "Venta",
+
+                                            "Venta registrada automáticamente"
+
+                                        ],
+
+                                        err => {
+
+                                            if (err) {
+
+                                                return db.rollback(() => {
+
+                                                    console.error(err);
+
+                                                    res.status(500).json({
+
+                                                        error: "Error registrando movimiento",
+
+                                                        detalle: err.sqlMessage
+
+                                                    });
+
+                                                });
+
+                                            }
+
+                                            pendientes--;
+
+                                            if (pendientes === 0) {
+
+                                                db.commit(err => {
+
+                                                    if (err) {
+
+                                                        return db.rollback(() => {
+
+                                                            console.error(err);
+
+                                                            res.status(500).json({
+
+                                                                error: "Error confirmando la venta"
+
+                                                            });
+
+                                                        });
+
+                                                    }
+
+                                                    res.json({
+
+                                                        mensaje: "Venta registrada correctamente"
+
+                                                    });
+
+                                                });
+
+                                            }
+
+                                        }
+
+                                    );
+
+                                }
+
+                            );
 
                         }
 
@@ -464,7 +642,9 @@ app.post("/ventas/completa", (req, res) => {
     });
 
 });
-// Endpoint para registrar una compra completa
+// REGISTRAR COMPRA COMPLETA
+// =====================================================
+
 app.post("/compras/completa", (req, res) => {
 
     const { proveedor, usuario, productos } = req.body;
@@ -480,9 +660,7 @@ app.post("/compras/completa", (req, res) => {
     let totalCompra = 0;
 
     productos.forEach(p => {
-
         totalCompra += Number(p.precio) * Number(p.cantidad);
-
     });
 
     db.beginTransaction(err => {
@@ -497,20 +675,39 @@ app.post("/compras/completa", (req, res) => {
 
         const sqlCompra = `
         INSERT INTO Compra
-        (fecha_compra,id_proveedor,id_usuario,total_compra)
-        VALUES (CURDATE(),?,?,?)
+        (
+            fecha_compra,
+            id_proveedor,
+            id_usuario,
+            total_compra
+        )
+        VALUES
+        (
+            CURDATE(),
+            ?,
+            ?,
+            ?
+        )
         `;
 
         db.query(
+
             sqlCompra,
-            [proveedor, usuario, totalCompra],
+
+            [
+
+                proveedor,
+                usuario,
+                totalCompra
+
+            ],
+
             (err, resultadoCompra) => {
 
                 if (err) {
 
                     return db.rollback(() => {
 
-                        console.error("ERROR INSERT COMPRA");
                         console.error(err);
 
                         res.status(500).json({
@@ -530,14 +727,44 @@ app.post("/compras/completa", (req, res) => {
                 const sqlDetalle = `
                 INSERT INTO Detalle_Compra
                 (
-                id_compra,
-                id_producto,
-                cantidad,
-                precio_unitario,
-                subtotal_compra,
-                total_compra
+                    id_compra,
+                    id_producto,
+                    cantidad,
+                    precio_unitario,
+                    subtotal_compra,
+                    total_compra
                 )
-                VALUES (?,?,?,?,?,?)
+                VALUES
+                (
+                    ?,?,?,?,?,?
+                )
+                `;
+
+                const sqlActualizarStock = `
+                UPDATE Producto
+                SET stock_actual = stock_actual + ?
+                WHERE id_producto = ?
+                `;
+
+                const sqlMovimiento = `
+                INSERT INTO Movimiento_Inventario
+                (
+                    id_producto,
+                    fecha_movimiento,
+                    tipo_movimiento,
+                    cantidad,
+                    referencia_tipo,
+                    observaciones
+                )
+                VALUES
+                (
+                    ?,
+                    NOW(),
+                    'entrada',
+                    ?,
+                    ?,
+                    ?
+                )
                 `;
 
                 let pendientes = productos.length;
@@ -547,6 +774,10 @@ app.post("/compras/completa", (req, res) => {
                     const subtotal =
                         Number(p.precio) *
                         Number(p.cantidad);
+
+                    // ==========================
+                    // DETALLE DE COMPRA
+                    // ==========================
 
                     db.query(
 
@@ -578,7 +809,9 @@ app.post("/compras/completa", (req, res) => {
 
                                     res.status(500).json({
 
-                                        error: "Error registrando detalle"
+                                        error: "Error registrando detalle",
+
+                                        detalle: err.sqlMessage
 
                                     });
 
@@ -586,19 +819,35 @@ app.post("/compras/completa", (req, res) => {
 
                             }
 
-                            pendientes--;
+                            // ==========================
+                            // ACTUALIZAR STOCK
+                            // ==========================
 
-                            if (pendientes === 0) {
+                            db.query(
 
-                                db.commit(err => {
+                                sqlActualizarStock,
+
+                                [
+
+                                    p.cantidad,
+
+                                    p.id_producto
+
+                                ],
+
+                                err => {
 
                                     if (err) {
 
                                         return db.rollback(() => {
 
+                                            console.error(err);
+
                                             res.status(500).json({
 
-                                                error: "Error al confirmar compra"
+                                                error: "Error actualizando stock",
+
+                                                detalle: err.sqlMessage
 
                                             });
 
@@ -606,16 +855,85 @@ app.post("/compras/completa", (req, res) => {
 
                                     }
 
-                                    res.json({
+                                    // ==========================
+                                    // REGISTRAR MOVIMIENTO
+                                    // ==========================
 
-                                        mensaje:
-                                        "Compra registrada correctamente"
+                                    db.query(
 
-                                    });
+                                        sqlMovimiento,
 
-                                });
+                                        [
 
-                            }
+                                            p.id_producto,
+
+                                            p.cantidad,
+
+                                            "Compra",
+
+                                            "Compra registrada automáticamente"
+
+                                        ],
+
+                                        err => {
+
+                                            if (err) {
+
+                                                return db.rollback(() => {
+
+                                                    console.error(err);
+
+                                                    res.status(500).json({
+
+                                                        error: "Error registrando movimiento",
+
+                                                        detalle: err.sqlMessage
+
+                                                    });
+
+                                                });
+
+                                            }
+
+                                            pendientes--;
+
+                                            if (pendientes === 0) {
+
+                                                db.commit(err => {
+
+                                                    if (err) {
+
+                                                        return db.rollback(() => {
+
+                                                            console.error(err);
+
+                                                            res.status(500).json({
+
+                                                                error: "Error confirmando compra"
+
+                                                            });
+
+                                                        });
+
+                                                    }
+
+                                                    res.json({
+
+                                                        mensaje: "Compra registrada correctamente"
+
+                                                    });
+
+                                                });
+
+                                            }
+
+                                        }
+
+                                    );
+
+                                }
+
+                            );
 
                         }
 
@@ -753,5 +1071,49 @@ app.post("/usuarios",(req,res)=>{
         }
 
     );
+
+});
+// OBTENER MOVIMIENTOS DE INVENTARIO
+// ==========================================
+
+app.get("/movimientos", (req, res) => {
+
+    const sql = `
+
+    SELECT
+
+        m.id_movimiento,
+        m.fecha_movimiento,
+        p.nombre_producto,
+        m.tipo_movimiento,
+        m.cantidad,
+        m.referencia_tipo,
+        m.observaciones
+
+    FROM Movimiento_Inventario m
+
+    INNER JOIN Producto p
+
+        ON m.id_producto = p.id_producto
+
+    ORDER BY m.fecha_movimiento DESC
+
+    `;
+
+    db.query(sql, (err, result) => {
+
+        if (err) {
+
+            console.error(err);
+
+            return res.status(500).json({
+                error: "Error obteniendo movimientos"
+            });
+
+        }
+
+        res.json(result);
+
+    });
 
 });
