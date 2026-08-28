@@ -1,1261 +1,2920 @@
-// Importación de librerías necesarias para el servidor backend
+"use strict";
+
+/* =========================================================
+   MICROSTOCK - BACKEND
+   Node.js + Express + MySQL + JWT + bcrypt
+   ========================================================= */
+
+require("dotenv").config();
+
 const express = require("express");
-const mysql = require("mysql2");
+const mysql = require("mysql2/promise");
 const cors = require("cors");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+
+const {
+    body,
+    param,
+    validationResult
+} = require("express-validator");
+
+
+/* =========================================================
+   CONFIGURACIÓN
+   ========================================================= */
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+const PORT = Number(process.env.PORT) || 3000;
 
-// Configuración de la conexión con la base de datos MySQL
-const db = mysql.createConnection({
-    host: "localhost",
-    user: "root",
-    password: "",
-    database: "MicroStock"
+const JWT_SECRET =
+    process.env.JWT_SECRET ||
+    "MICROSTOCK_DEV_SECRET_CAMBIAR_EN_PRODUCCION";
+
+if (!process.env.JWT_SECRET) {
+    console.warn(
+        "ADVERTENCIA: JWT_SECRET no está configurado en .env. " +
+        "Se utilizará una clave temporal de desarrollo."
+    );
+}
+
+
+/* =========================================================
+   MIDDLEWARES
+   ========================================================= */
+
+app.use(
+    helmet({
+        crossOriginResourcePolicy: false
+    })
+);
+
+app.use(
+    cors({
+        origin: true,
+        methods: [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "OPTIONS"
+        ],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization"
+        ]
+    })
+);
+
+app.use(
+    express.json({
+        limit: "1mb"
+    })
+);
+
+
+/* =========================================================
+   CONEXIÓN MYSQL
+   ========================================================= */
+
+const db = mysql.createPool({
+    host:
+        process.env.DB_HOST ||
+        "localhost",
+
+    user:
+        process.env.DB_USER ||
+        "root",
+
+    password:
+        process.env.DB_PASSWORD ||
+        "",
+
+    database:
+        process.env.DB_NAME ||
+        "MicroStock",
+
+    waitForConnections: true,
+
+    connectionLimit: 10,
+
+    queueLimit: 0
 });
-// Verifica y establece la conexión con la base de datos
-db.connect(err => {
-    if (err) throw err;
-    console.log("Conectado a MySQL");
-});
-// Inicio del servidor backend en el puerto 3000
-app.listen(3000, () => {
-    console.log("Servidor corriendo en http://localhost:3000");
-});
 
-// Endpoint que obtiene todos los productos junto con su categoría
-app.get("/productos", (req, res) => {
-// Consulta SQL que relaciona productos y categorías
-    const sql = `
-    SELECT 
-        p.id_producto,
-        p.nombre_producto,
-        p.precio_unitario,
-        p.stock_actual,
-        p.stock_minimo,
-        c.nombre_categoria
-    FROM Producto p
-    JOIN Categoria c 
-    ON p.id_categoria = c.id_categoria
-    `;
 
-    db.query(sql, (err, result) => {
+/* =========================================================
+   VALIDACIÓN GENERAL
+   ========================================================= */
 
-        if (err) {
-            console.error(err);
-            return res.status(500).json({
-                error: "Error al obtener productos"
-            });
-        }
+function validarRequest(req, res, next) {
 
-        res.json(result);
+    const errors =
+        validationResult(req);
 
-    });
+    if (!errors.isEmpty()) {
 
-});
+        return res.status(400).json({
 
-// Endpoint encargado de registrar nuevos productos
-app.post("/productos", (req, res) => {
+            success: false,
 
-    const { nombre, precio, stock, minimo, categoria } = req.body;
+            message:
+                "Los datos enviados no son válidos.",
 
-    // Validación básica
-    if (!nombre || !precio || !stock || !minimo || !categoria) {
-        return res.status(400).json({ error: "Datos incompletos" });
+            errors:
+                errors.array().map(error => ({
+
+                    field:
+                        error.path,
+
+                    message:
+                        error.msg
+
+                }))
+
+        });
+
     }
 
-    const sql = `
-    INSERT INTO Producto 
-    (nombre_producto, precio_unitario, stock_actual, stock_minimo, id_categoria)
-    VALUES (?, ?, ?, ?, ?)
-    `;
-// Inserta el producto en la tabla Producto
-    db.query(sql, [nombre, precio, stock, minimo, categoria], (err, result) => {
+    next();
+}
 
-        if (err) {
-            console.error("Error SQL:", err);
-            return res.status(500).json({
-                error: "Error al guardar producto",
-                detalle: err.sqlMessage
-            });
+
+/* =========================================================
+   JWT
+   ========================================================= */
+
+function generarToken(usuario) {
+
+    return jwt.sign(
+
+        {
+            id_usuario:
+                usuario.id_usuario,
+
+            correo:
+                usuario.correo,
+
+            id_rol:
+                usuario.id_rol,
+
+            nombre_rol:
+                usuario.nombre_rol
+
+        },
+
+        JWT_SECRET,
+
+        {
+            expiresIn: "2h"
         }
 
-        res.json({ mensaje: "Producto guardado correctamente" });
-    });
+    );
+}
 
-});
 
-//Conectar ventas
-app.post("/ventas", (req, res) => {
+function autenticarToken(req, res, next) {
 
-    const { cliente, usuario } = req.body;
+    const authorization =
+        req.headers.authorization;
 
-    const sql = "INSERT INTO Venta (fecha_venta, id_cliente, id_usuario) VALUES (CURDATE(), ?, ?)";
+    if (
+        !authorization ||
+        !authorization.startsWith("Bearer ")
+    ) {
 
-    db.query(sql, [cliente, usuario], (err, result) => {
-        if (err) {
-    console.error(err);
-    return res.status(500).json({
-        error: "Error al registrar venta"
-    });
-}        res.json({ idVenta: result.insertId });
-    });
+        return res.status(401).json({
 
-});
+            success: false,
 
-// Endpoint que devuelve todas las categorías registradas
-app.get("/categorias", (req, res) => {
-    db.query("SELECT * FROM Categoria", (err, result) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: "Error al obtener categorías" });
+            message:
+                "Acceso no autorizado. Debe iniciar sesión."
+
+        });
+
+    }
+
+    const token =
+        authorization.substring(7);
+
+    try {
+
+        const decoded =
+            jwt.verify(
+                token,
+                JWT_SECRET
+            );
+
+        req.user =
+            decoded;
+
+        next();
+
+    } catch (error) {
+
+        return res.status(401).json({
+
+            success: false,
+
+            message:
+                "La sesión ha expirado o el token no es válido."
+
+        });
+
+    }
+}
+
+
+/* =========================================================
+   LIMITADOR DE LOGIN
+   ========================================================= */
+
+const loginLimiter =
+    rateLimit({
+
+        windowMs:
+            15 * 60 * 1000,
+
+        max:
+            10,
+
+        standardHeaders:
+            true,
+
+        legacyHeaders:
+            false,
+
+        message: {
+
+            success: false,
+
+            message:
+                "Demasiados intentos de inicio de sesión. Intente nuevamente más tarde."
+
         }
-        res.json(result);
-    });
-});
-// OBTENER ROLES
-// ==========================================
-
-app.get("/roles",(req,res)=>{
-
-    const sql=`
-
-    SELECT *
-
-    FROM Rol
-
-    ORDER BY nombre_rol
-
-    `;
-
-    db.query(sql,(err,result)=>{
-
-        if(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                error:"Error obteniendo roles"
-
-            });
-
-        }
-
-        res.json(result);
 
     });
 
-});
-// Endpoint encargado de registrar nuevas categorías
 
-app.post("/categorias", (req,res)=>{
+/* =========================================================
+   RUTA PRINCIPAL
+   ========================================================= */
 
-    const { nombre, descripcion } = req.body;
-
-    const sql = `
-    INSERT INTO Categoria
-    (nombre_categoria, descripcion_categoria)
-    VALUES (?,?)
-    `;
-// Inserta una nueva categoría en la tabla Categoria
-    db.query(sql,[nombre,descripcion],(err,result)=>{
-
-        if(err){
-            console.error(err);
-            return res.status(500).json({
-                error:"Error al guardar categoría"
-            });
-        }
+app.get(
+    "/",
+    (req, res) => {
 
         res.json({
-            mensaje:"Categoría guardada correctamente"
-        });
 
-    });
+            success: true,
 
-});
-// Obtener todos los clientes
-app.get("/clientes", (req, res) => {
+            message:
+                "API de MicroStock funcionando correctamente."
 
-    const sql = `
-        SELECT *
-        FROM Cliente
-    `;
-
-    db.query(sql, (err, result) => {
-
-        if(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-                error:"Error al obtener clientes"
-            });
-
-        }
-
-        res.json(result);
-
-    });
-
-});
-// Registrar cliente
-app.post("/clientes", (req, res) => {
-
-    const {
-        nombre,
-        telefono,
-        correo,
-        direccion
-    } = req.body;
-
-    const sql = `
-        INSERT INTO Cliente
-        (
-            nombre_cliente,
-            telefono,
-            correo,
-            direccion
-        )
-        VALUES
-        (?,?,?,?)
-    `;
-
-    db.query(
-
-        sql,
-
-        [
-            nombre,
-            telefono,
-            correo,
-            direccion
-        ],
-
-        (err,result)=>{
-
-            if(err){
-
-                console.error(err);
-
-                return res.status(500).json({
-                    error:"Error al guardar cliente"
-                });
-
-            }
-
-            res.json({
-                mensaje:"Cliente registrado correctamente"
-            });
-
-        }
-
-    );
-
-});
-
-// Obtener proveedores
-app.get("/proveedores", (req,res)=>{
-
-    const sql="SELECT * FROM Proveedor";
-
-    db.query(sql,(err,result)=>{
-
-        if(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-                error:"Error al obtener proveedores"
-            });
-
-        }
-
-        res.json(result);
-
-    });
-
-});
-// Registrar proveedor
-app.post("/proveedores",(req,res)=>{
-
-    const {
-
-        nombre,
-        telefono,
-        correo,
-        direccion
-
-    } = req.body;
-
-    const sql=`
-
-    INSERT INTO Proveedor
-
-    (
-
-        nombre_proveedor,
-        telefono,
-        correo,
-        direccion
-
-    )
-
-    VALUES
-
-    (?,?,?,?)
-
-    `;
-
-    db.query(
-
-        sql,
-
-        [
-
-            nombre,
-            telefono,
-            correo,
-            direccion
-
-        ],
-
-        (err,result)=>{
-
-            if(err){
-
-                console.error(err);
-
-                return res.status(500).json({
-
-                    error:"Error al guardar proveedor"
-
-                });
-
-            }
-
-            res.json({
-
-                mensaje:"Proveedor registrado correctamente"
-
-            });
-
-        }
-
-    );
-
-});
-// REGISTRAR VENTA COMPLETA
-// =====================================================
-
-app.post("/ventas/completa", (req, res) => {
-
-    const { cliente, usuario, productos } = req.body;
-
-    if (!cliente || !usuario || !productos || productos.length === 0) {
-
-        return res.status(400).json({
-            error: "Información incompleta"
         });
 
     }
+);
 
-    db.beginTransaction(err => {
 
-        if (err) {
+/* =========================================================
+   AUTENTICACIÓN - ROLES
+   ========================================================= */
 
-            return res.status(500).json({
-                error: "Error iniciando la transacción"
+app.get(
+    "/roles",
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_rol,
+                        nombre_rol,
+                        descripcion_rol
+                    FROM Rol
+                    ORDER BY nombre_rol
+                    `
+
+                );
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(
+                "Error obteniendo roles:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Error obteniendo roles."
+
             });
 
         }
 
-        const sqlVenta = `
-        INSERT INTO Venta
-        (
-            fecha_venta,
-            id_cliente,
-            id_usuario
-        )
-        VALUES
-        (
-            CURDATE(),
-            ?,
-            ?
-        )
-        `;
+    }
+);
 
-        db.query(
 
-            sqlVenta,
+/* =========================================================
+   AUTENTICACIÓN - REGISTRO
+   ========================================================= */
 
-            [
+app.post(
 
+    "/api/auth/register",
+
+    [
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .withMessage(
+                "El nombre es obligatorio."
+            )
+            .isLength({
+                max: 100
+            })
+            .withMessage(
+                "El nombre no puede superar 100 caracteres."
+            ),
+
+        body("correo")
+            .trim()
+            .isEmail()
+            .withMessage(
+                "Ingrese un correo electrónico válido."
+            )
+            .normalizeEmail()
+            .isLength({
+                max: 100
+            }),
+
+        body("password")
+            .isLength({
+                min: 6,
+                max: 100
+            })
+            .withMessage(
+                "La contraseña debe tener entre 6 y 100 caracteres."
+            ),
+
+        body("rol")
+            .isInt({
+                min: 1
+            })
+            .withMessage(
+                "Seleccione un rol válido."
+            )
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                nombre,
+                correo,
+                password,
+                rol
+            } = req.body;
+
+
+            /* -----------------------------------------
+               VERIFICAR CORREO
+            ----------------------------------------- */
+
+            const [
+                usuarios
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_usuario
+                    FROM Usuario
+                    WHERE correo = ?
+                    LIMIT 1
+                    `,
+
+                    [correo]
+
+                );
+
+
+            if (
+                usuarios.length > 0
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "El correo electrónico ya está registrado. Por favor, use otro."
+
+                });
+
+            }
+
+
+            /* -----------------------------------------
+               VERIFICAR ROL
+            ----------------------------------------- */
+
+            const [
+                roles
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_rol
+                    FROM Rol
+                    WHERE id_rol = ?
+                    LIMIT 1
+                    `,
+
+                    [rol]
+
+                );
+
+
+            if (
+                roles.length === 0
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "El rol seleccionado no existe."
+
+                });
+
+            }
+
+
+            /* -----------------------------------------
+               HASH DE CONTRASEÑA
+            ----------------------------------------- */
+
+            const passwordHash =
+                await bcrypt.hash(
+                    password,
+                    10
+                );
+
+
+            /* -----------------------------------------
+               INSERTAR USUARIO
+            ----------------------------------------- */
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    INSERT INTO Usuario
+                    (
+                        nombre_usuario,
+                        correo,
+                        contrasena_hash,
+                        id_rol
+                    )
+                    VALUES (?, ?, ?, ?)
+                    `,
+
+                    [
+                        nombre,
+                        correo,
+                        passwordHash,
+                        rol
+                    ]
+
+                );
+
+
+            return res.status(201).json({
+
+                success: true,
+
+                message:
+                    "Usuario registrado correctamente.",
+
+                id_usuario:
+                    result.insertId
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Error registrando usuario:",
+                error
+            );
+
+
+            if (
+                error.code ===
+                "ER_DUP_ENTRY"
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    message:
+                        "El correo electrónico ya está registrado. Por favor, use otro."
+
+                });
+
+            }
+
+
+            return res.status(500).json({
+
+                success: false,
+
+                message:
+                    "No fue posible registrar el usuario."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   AUTENTICACIÓN - LOGIN
+   ========================================================= */
+
+app.post(
+
+    "/api/auth/login",
+
+    loginLimiter,
+
+    [
+
+        body("correo")
+            .trim()
+            .isEmail()
+            .withMessage(
+                "Ingrese un correo electrónico válido."
+            )
+            .normalizeEmail(),
+
+        body("password")
+            .notEmpty()
+            .withMessage(
+                "La contraseña es obligatoria."
+            )
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                correo,
+                password
+            } = req.body;
+
+
+            /* -----------------------------------------
+               BUSCAR USUARIO
+            ----------------------------------------- */
+
+            const [
+                usuarios
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        u.id_usuario,
+                        u.nombre_usuario,
+                        u.correo,
+                        u.contrasena_hash,
+                        u.id_rol,
+                        r.nombre_rol
+                    FROM Usuario u
+                    INNER JOIN Rol r
+                        ON u.id_rol = r.id_rol
+                    WHERE u.correo = ?
+                    LIMIT 1
+                    `,
+
+                    [correo]
+
+                );
+
+
+            if (
+                usuarios.length === 0
+            ) {
+
+                return res.status(401).json({
+
+                    success: false,
+
+                    message:
+                        "Credenciales inválidas. Por favor, intente de nuevo."
+
+                });
+
+            }
+
+
+            const usuario =
+                usuarios[0];
+
+
+            /* -----------------------------------------
+               COMPARAR CONTRASEÑA
+            ----------------------------------------- */
+
+            const passwordCorrecta =
+                await bcrypt.compare(
+
+                    password,
+
+                    usuario.contrasena_hash
+
+                );
+
+
+            if (!passwordCorrecta) {
+
+                return res.status(401).json({
+
+                    success: false,
+
+                    message:
+                        "Credenciales inválidas. Por favor, intente de nuevo."
+
+                });
+
+            }
+
+
+            /* -----------------------------------------
+               GENERAR JWT
+            ----------------------------------------- */
+
+            const token =
+                generarToken(
+                    usuario
+                );
+
+
+            return res.json({
+
+                success: true,
+
+                message:
+                    "Inicio de sesión exitoso.",
+
+                token,
+
+                user: {
+
+                    id_usuario:
+                        usuario.id_usuario,
+
+                    nombre_usuario:
+                        usuario.nombre_usuario,
+
+                    correo:
+                        usuario.correo,
+
+                    id_rol:
+                        usuario.id_rol,
+
+                    nombre_rol:
+                        usuario.nombre_rol
+
+                }
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Error en login:",
+                error
+            );
+
+            return res.status(500).json({
+
+                success: false,
+
+                message:
+                    "No fue posible procesar el inicio de sesión."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   CATEGORÍAS
+   ========================================================= */
+
+app.get(
+    "/categorias",
+    autenticarToken,
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_categoria,
+                        nombre_categoria,
+                        descripcion_categoria
+                    FROM Categoria
+                    ORDER BY nombre_categoria
+                    `
+
+                );
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Error al obtener categorías."
+
+            });
+
+        }
+
+    }
+);
+
+
+app.post(
+
+    "/categorias",
+
+    autenticarToken,
+
+    [
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .withMessage(
+                "El nombre de la categoría es obligatorio."
+            )
+            .isLength({
+                max: 100
+            }),
+
+        body("descripcion")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .isLength({
+                max: 500
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                nombre,
+                descripcion
+            } = req.body;
+
+
+            await db.execute(
+
+                `
+                INSERT INTO Categoria
+                (
+                    nombre_categoria,
+                    descripcion_categoria
+                )
+                VALUES (?, ?)
+                `,
+
+                [
+                    nombre,
+                    descripcion || null
+                ]
+
+            );
+
+
+            res.status(201).json({
+
+                success: true,
+
+                mensaje:
+                    "Categoría guardada correctamente."
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (
+                error.code ===
+                "ER_DUP_ENTRY"
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    error:
+                        "La categoría ya existe."
+
+                });
+
+            }
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al guardar categoría."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   PRODUCTOS
+   ========================================================= */
+
+app.get(
+    "/productos",
+    autenticarToken,
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        p.id_producto,
+                        p.nombre_producto,
+                        p.precio_unitario,
+                        p.stock_actual,
+                        p.stock_minimo,
+                        c.nombre_categoria
+                    FROM Producto p
+                    INNER JOIN Categoria c
+                        ON p.id_categoria =
+                           c.id_categoria
+                    ORDER BY p.id_producto
+                    `
+
+                );
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al obtener productos."
+
+            });
+
+        }
+
+    }
+);
+
+
+app.post(
+
+    "/productos",
+
+    autenticarToken,
+
+    [
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .isLength({
+                max: 100
+            }),
+
+        body("precio")
+            .isFloat({
+                min: 0
+            }),
+
+        body("stock")
+            .isInt({
+                min: 0
+            }),
+
+        body("minimo")
+            .isInt({
+                min: 0
+            }),
+
+        body("categoria")
+            .isInt({
+                min: 1
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                nombre,
+                precio,
+                stock,
+                minimo,
+                categoria
+            } = req.body;
+
+
+            const [
+                categoriaExiste
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_categoria
+                    FROM Categoria
+                    WHERE id_categoria = ?
+                    `,
+
+                    [categoria]
+
+                );
+
+
+            if (
+                categoriaExiste.length === 0
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "La categoría no existe."
+
+                });
+
+            }
+
+
+            await db.execute(
+
+                `
+                INSERT INTO Producto
+                (
+                    nombre_producto,
+                    precio_unitario,
+                    stock_actual,
+                    stock_minimo,
+                    id_categoria
+                )
+                VALUES (?, ?, ?, ?, ?)
+                `,
+
+                [
+                    nombre,
+                    precio,
+                    stock,
+                    minimo,
+                    categoria
+                ]
+
+            );
+
+
+            res.status(201).json({
+
+                success: true,
+
+                mensaje:
+                    "Producto guardado correctamente."
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al guardar producto."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   CLIENTES
+   ========================================================= */
+
+app.get(
+    "/clientes",
+    autenticarToken,
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_cliente,
+                        nombre_cliente,
+                        telefono,
+                        correo,
+                        direccion
+                    FROM Cliente
+                    ORDER BY id_cliente
+                    `
+
+                );
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al obtener clientes."
+
+            });
+
+        }
+
+    }
+);
+
+
+app.post(
+
+    "/clientes",
+
+    autenticarToken,
+
+    [
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .isLength({
+                max: 100
+            }),
+
+        body("telefono")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .isLength({
+                max: 15
+            }),
+
+        body("correo")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .custom(value => {
+
+                if (
+                    value &&
+                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+                ) {
+
+                    throw new Error(
+                        "El correo no es válido."
+                    );
+
+                }
+
+                return true;
+
+            }),
+
+        body("direccion")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .isLength({
+                max: 255
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                nombre,
+                telefono,
+                correo,
+                direccion
+            } = req.body;
+
+
+            await db.execute(
+
+                `
+                INSERT INTO Cliente
+                (
+                    nombre_cliente,
+                    telefono,
+                    correo,
+                    direccion
+                )
+                VALUES (?, ?, ?, ?)
+                `,
+
+                [
+                    nombre,
+                    telefono || null,
+                    correo || null,
+                    direccion || null
+                ]
+
+            );
+
+
+            res.status(201).json({
+
+                success: true,
+
+                mensaje:
+                    "Cliente registrado correctamente."
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al guardar cliente."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   PROVEEDORES
+   ========================================================= */
+
+app.get(
+    "/proveedores",
+    autenticarToken,
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_proveedor,
+                        nombre_proveedor,
+                        telefono,
+                        correo,
+                        direccion
+                    FROM Proveedor
+                    ORDER BY id_proveedor
+                    `
+
+                );
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al obtener proveedores."
+
+            });
+
+        }
+
+    }
+);
+
+
+app.post(
+
+    "/proveedores",
+
+    autenticarToken,
+
+    [
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .isLength({
+                max: 100
+            }),
+
+        body("telefono")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .isLength({
+                max: 15
+            }),
+
+        body("correo")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .custom(value => {
+
+                if (
+                    value &&
+                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+                ) {
+
+                    throw new Error(
+                        "El correo no es válido."
+                    );
+
+                }
+
+                return true;
+
+            }),
+
+        body("direccion")
+            .optional({
+                nullable: true
+            })
+            .trim()
+            .isLength({
+                max: 255
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                nombre,
+                telefono,
+                correo,
+                direccion
+            } = req.body;
+
+
+            await db.execute(
+
+                `
+                INSERT INTO Proveedor
+                (
+                    nombre_proveedor,
+                    telefono,
+                    correo,
+                    direccion
+                )
+                VALUES (?, ?, ?, ?)
+                `,
+
+                [
+                    nombre,
+                    telefono || null,
+                    correo || null,
+                    direccion || null
+                ]
+
+            );
+
+
+            res.status(201).json({
+
+                success: true,
+
+                mensaje:
+                    "Proveedor registrado correctamente."
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error al guardar proveedor."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   VENTAS - REGISTRO SIMPLE
+   ========================================================= */
+
+app.post(
+
+    "/ventas",
+
+    autenticarToken,
+
+    [
+
+        body("cliente")
+            .isInt({
+                min: 1
+            }),
+
+        body("usuario")
+            .isInt({
+                min: 1
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
                 cliente,
                 usuario
+            } = req.body;
 
-            ],
 
-            (err, ventaResult) => {
+            const [
+                result
+            ] =
+                await db.execute(
 
-                if (err) {
+                    `
+                    INSERT INTO Venta
+                    (
+                        fecha_venta,
+                        id_cliente,
+                        id_usuario
+                    )
+                    VALUES
+                    (
+                        CURDATE(),
+                        ?,
+                        ?
+                    )
+                    `,
 
-                    return db.rollback(() => {
+                    [
+                        cliente,
+                        usuario
+                    ]
 
-                        console.error(err);
+                );
 
-                        res.status(500).json({
 
-                            error: "Error registrando la venta",
+            res.status(201).json({
 
-                            detalle: err.sqlMessage
+                success: true,
 
-                        });
+                idVenta:
+                    result.insertId
 
-                    });
+            });
 
-                }
+        } catch (error) {
 
-                const idVenta = ventaResult.insertId;
+            console.error(error);
 
-                const sqlDetalle = `
-                INSERT INTO Detalle_Venta
-                (
-                    id_venta,
-                    id_producto,
-                    cantidad,
-                    precio_unitario,
-                    subtotal
-                )
-                VALUES
-                (
-                    ?,?,?,?,?
-                )
-                `;
+            res.status(500).json({
 
-                const sqlActualizarStock = `
-                UPDATE Producto
-                SET stock_actual = stock_actual - ?
-                WHERE id_producto = ?
-                `;
+                success: false,
 
-                const sqlMovimiento = `
-                INSERT INTO Movimiento_Inventario
-                (
-                    id_producto,
-                    fecha_movimiento,
-                    tipo_movimiento,
-                    cantidad,
-                    referencia_tipo,
-                    observaciones
-                )
-                VALUES
-                (
-                    ?,
-                    NOW(),
-                    'salida',
-                    ?,
-                    ?,
-                    ?
-                )
-                `;
+                error:
+                    "Error al registrar venta."
 
-                let pendientes = productos.length;
-
-                productos.forEach(producto => {
-
-                    const subtotal =
-                        Number(producto.cantidad) *
-                        Number(producto.precio);
-
-                    // ==========================================
-                    // REGISTRAR DETALLE DE VENTA
-                    // ==========================================
-
-                    db.query(
-
-                        sqlDetalle,
-
-                        [
-
-                            idVenta,
-
-                            producto.id_producto,
-
-                            producto.cantidad,
-
-                            producto.precio,
-
-                            subtotal
-
-                        ],
-
-                        err => {
-
-                            if (err) {
-
-                                return db.rollback(() => {
-
-                                    console.error(err);
-
-                                    res.status(500).json({
-
-                                        error: "Error registrando detalle de venta",
-
-                                        detalle: err.sqlMessage
-
-                                    });
-
-                                });
-
-                            }
-
-                            // ==========================================
-                            // DESCONTAR STOCK
-                            // ==========================================
-
-                            db.query(
-
-                                sqlActualizarStock,
-
-                                [
-
-                                    producto.cantidad,
-
-                                    producto.id_producto
-
-                                ],
-
-                                err => {
-
-                                    if (err) {
-
-                                        return db.rollback(() => {
-
-                                            console.error(err);
-
-                                            res.status(500).json({
-
-                                                error: "Error actualizando el stock",
-
-                                                detalle: err.sqlMessage
-
-                                            });
-
-                                        });
-
-                                    }
-
-                                    // ==========================================
-                                    // REGISTRAR MOVIMIENTO
-                                    // ==========================================
-
-                                    db.query(
-
-                                        sqlMovimiento,
-
-                                        [
-
-                                            producto.id_producto,
-
-                                            producto.cantidad,
-
-                                            "Venta",
-
-                                            "Venta registrada automáticamente"
-
-                                        ],
-
-                                        err => {
-
-                                            if (err) {
-
-                                                return db.rollback(() => {
-
-                                                    console.error(err);
-
-                                                    res.status(500).json({
-
-                                                        error: "Error registrando movimiento",
-
-                                                        detalle: err.sqlMessage
-
-                                                    });
-
-                                                });
-
-                                            }
-
-                                            pendientes--;
-
-                                            if (pendientes === 0) {
-
-                                                db.commit(err => {
-
-                                                    if (err) {
-
-                                                        return db.rollback(() => {
-
-                                                            console.error(err);
-
-                                                            res.status(500).json({
-
-                                                                error: "Error confirmando la venta"
-
-                                                            });
-
-                                                        });
-
-                                                    }
-
-                                                    res.json({
-
-                                                        mensaje: "Venta registrada correctamente"
-
-                                                    });
-
-                                                });
-
-                                            }
-
-                                        }
-
-                                    );
-
-                                }
-
-                            );
-
-                        }
-
-                    );
-
-                });
-
-            }
-
-        );
-
-    });
-
-});
-// REGISTRAR COMPRA COMPLETA
-// =====================================================
-
-app.post("/compras/completa", (req, res) => {
-
-    const { proveedor, usuario, productos } = req.body;
-
-    if (!proveedor || !usuario || !productos || productos.length === 0) {
-
-        return res.status(400).json({
-            error: "Datos incompletos"
-        });
-
-    }
-
-    let totalCompra = 0;
-
-    productos.forEach(p => {
-        totalCompra += Number(p.precio) * Number(p.cantidad);
-    });
-
-    db.beginTransaction(err => {
-
-        if (err) {
-
-            return res.status(500).json({
-                error: "Error iniciando transacción"
             });
 
         }
 
-        const sqlCompra = `
-        INSERT INTO Compra
-        (
-            fecha_compra,
-            id_proveedor,
-            id_usuario,
-            total_compra
-        )
-        VALUES
-        (
-            CURDATE(),
-            ?,
-            ?,
-            ?
-        )
-        `;
+    }
 
-        db.query(
+);
 
-            sqlCompra,
 
-            [
+/* =========================================================
+   VENTAS - COMPLETA
+   ========================================================= */
 
+app.post(
+
+    "/ventas/completa",
+
+    autenticarToken,
+
+    [
+
+        body("cliente")
+            .isInt({
+                min: 1
+            }),
+
+        body("usuario")
+            .isInt({
+                min: 1
+            }),
+
+        body("productos")
+            .isArray({
+                min: 1
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        const connection =
+            await db.getConnection();
+
+        try {
+
+            const {
+                cliente,
+                usuario,
+                productos
+            } = req.body;
+
+
+            await connection.beginTransaction();
+
+
+            /* -----------------------------------------
+               VERIFICAR CLIENTE
+            ----------------------------------------- */
+
+            const [
+                clientes
+            ] =
+                await connection.execute(
+
+                    `
+                    SELECT id_cliente
+                    FROM Cliente
+                    WHERE id_cliente = ?
+                    `,
+
+                    [cliente]
+
+                );
+
+
+            if (
+                clientes.length === 0
+            ) {
+
+                throw new Error(
+                    "El cliente no existe."
+                );
+
+            }
+
+
+            /* -----------------------------------------
+               VERIFICAR USUARIO
+            ----------------------------------------- */
+
+            const [
+                usuarios
+            ] =
+                await connection.execute(
+
+                    `
+                    SELECT id_usuario
+                    FROM Usuario
+                    WHERE id_usuario = ?
+                    `,
+
+                    [usuario]
+
+                );
+
+
+            if (
+                usuarios.length === 0
+            ) {
+
+                throw new Error(
+                    "El usuario no existe."
+                );
+
+            }
+
+
+            /* -----------------------------------------
+               CREAR VENTA
+            ----------------------------------------- */
+
+            const [
+                ventaResult
+            ] =
+                await connection.execute(
+
+                    `
+                    INSERT INTO Venta
+                    (
+                        fecha_venta,
+                        id_cliente,
+                        id_usuario
+                    )
+                    VALUES
+                    (
+                        CURDATE(),
+                        ?,
+                        ?
+                    )
+                    `,
+
+                    [
+                        cliente,
+                        usuario
+                    ]
+
+                );
+
+
+            const idVenta =
+                ventaResult.insertId;
+
+
+            /* -----------------------------------------
+               DETALLES DE VENTA
+            ----------------------------------------- */
+
+            for (
+                const producto
+                of productos
+            ) {
+
+                const idProducto =
+                    Number(
+                        producto.id_producto
+                    );
+
+                const cantidad =
+                    Number(
+                        producto.cantidad
+                    );
+
+                const precio =
+                    Number(
+                        producto.precio
+                    );
+
+
+                if (
+                    !Number.isInteger(idProducto) ||
+                    !Number.isInteger(cantidad) ||
+                    cantidad <= 0 ||
+                    !Number.isFinite(precio) ||
+                    precio < 0
+                ) {
+
+                    throw new Error(
+                        "Los datos de uno de los productos son inválidos."
+                    );
+
+                }
+
+
+                /* -----------------------------------------
+                   BLOQUEAR PRODUCTO Y VERIFICAR STOCK
+                ----------------------------------------- */
+
+                const [
+                    productosDB
+                ] =
+                    await connection.execute(
+
+                        `
+                        SELECT
+                            id_producto,
+                            stock_actual
+                        FROM Producto
+                        WHERE id_producto = ?
+                        FOR UPDATE
+                        `,
+
+                        [idProducto]
+
+                    );
+
+
+                if (
+                    productosDB.length === 0
+                ) {
+
+                    throw new Error(
+                        `El producto ${idProducto} no existe.`
+                    );
+
+                }
+
+
+                if (
+                    Number(
+                        productosDB[0].stock_actual
+                    ) < cantidad
+                ) {
+
+                    throw new Error(
+                        `Stock insuficiente para el producto ID ${idProducto}.`
+                    );
+
+                }
+
+
+                const subtotal =
+                    cantidad * precio;
+
+
+                /* -----------------------------------------
+                   INSERTAR DETALLE
+
+                   El trigger:
+                   trg_reducir_stock
+
+                   actualiza el stock automáticamente.
+                ----------------------------------------- */
+
+                await connection.execute(
+
+                    `
+                    INSERT INTO Detalle_Venta
+                    (
+                        id_venta,
+                        id_producto,
+                        cantidad,
+                        precio_unitario,
+                        subtotal
+                    )
+                    VALUES (?, ?, ?, ?, ?)
+                    `,
+
+                    [
+                        idVenta,
+                        idProducto,
+                        cantidad,
+                        precio,
+                        subtotal
+                    ]
+
+                );
+
+
+                /* -----------------------------------------
+                   MOVIMIENTO
+                ----------------------------------------- */
+
+                await connection.execute(
+
+                    `
+                    INSERT INTO Movimiento_Inventario
+                    (
+                        id_producto,
+                        fecha_movimiento,
+                        tipo_movimiento,
+                        cantidad,
+                        referencia_tipo,
+                        observaciones
+                    )
+                    VALUES
+                    (
+                        ?,
+                        NOW(),
+                        'salida',
+                        ?,
+                        'Venta',
+                        'Venta registrada automáticamente'
+                    )
+                    `,
+
+                    [
+                        idProducto,
+                        cantidad
+                    ]
+
+                );
+
+            }
+
+
+            await connection.commit();
+
+
+            res.status(201).json({
+
+                success: true,
+
+                mensaje:
+                    "Venta registrada correctamente.",
+
+                idVenta
+
+            });
+
+        } catch (error) {
+
+            await connection.rollback();
+
+            console.error(
+                "Error registrando venta:",
+                error
+            );
+
+            res.status(400).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "Error registrando la venta."
+
+            });
+
+        } finally {
+
+            connection.release();
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   OBTENER VENTAS
+   ========================================================= */
+
+app.get(
+
+    "/ventas",
+
+    autenticarToken,
+
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        v.id_venta,
+                        v.fecha_venta,
+                        c.nombre_cliente,
+                        u.nombre_usuario,
+
+                        COALESCE(
+                            SUM(
+                                dv.cantidad *
+                                dv.precio_unitario
+                            ),
+                            0
+                        ) AS total_venta
+
+                    FROM Venta v
+
+                    LEFT JOIN Cliente c
+                        ON v.id_cliente =
+                           c.id_cliente
+
+                    LEFT JOIN Usuario u
+                        ON v.id_usuario =
+                           u.id_usuario
+
+                    LEFT JOIN Detalle_Venta dv
+                        ON v.id_venta =
+                           dv.id_venta
+
+                    GROUP BY
+                        v.id_venta,
+                        v.fecha_venta,
+                        c.nombre_cliente,
+                        u.nombre_usuario
+
+                    ORDER BY
+                        v.id_venta DESC
+                    `
+
+                );
+
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(
+                "Error obteniendo ventas:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error obteniendo ventas."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   COMPRAS COMPLETAS
+   ========================================================= */
+
+app.post(
+
+    "/compras/completa",
+
+    autenticarToken,
+
+    [
+
+        body("proveedor")
+            .isInt({
+                min: 1
+            }),
+
+        body("usuario")
+            .isInt({
+                min: 1
+            }),
+
+        body("productos")
+            .isArray({
+                min: 1
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        const connection =
+            await db.getConnection();
+
+        try {
+
+            const {
                 proveedor,
                 usuario,
-                totalCompra
+                productos
+            } = req.body;
 
-            ],
 
-            (err, resultadoCompra) => {
+            await connection.beginTransaction();
 
-                if (err) {
 
-                    return db.rollback(() => {
+            /* -----------------------------------------
+               VERIFICAR PROVEEDOR
+            ----------------------------------------- */
 
-                        console.error(err);
+            const [
+                proveedores
+            ] =
+                await connection.execute(
 
-                        res.status(500).json({
+                    `
+                    SELECT id_proveedor
+                    FROM Proveedor
+                    WHERE id_proveedor = ?
+                    `,
 
-                            error: "Error registrando compra",
+                    [proveedor]
 
-                            detalle: err.sqlMessage
+                );
 
-                        });
 
-                    });
+            if (
+                proveedores.length === 0
+            ) {
+
+                throw new Error(
+                    "El proveedor no existe."
+                );
+
+            }
+
+
+            /* -----------------------------------------
+               VERIFICAR USUARIO
+            ----------------------------------------- */
+
+            const [
+                usuarios
+            ] =
+                await connection.execute(
+
+                    `
+                    SELECT id_usuario
+                    FROM Usuario
+                    WHERE id_usuario = ?
+                    `,
+
+                    [usuario]
+
+                );
+
+
+            if (
+                usuarios.length === 0
+            ) {
+
+                throw new Error(
+                    "El usuario no existe."
+                );
+
+            }
+
+
+            /* -----------------------------------------
+               CALCULAR TOTAL
+            ----------------------------------------- */
+
+            let totalCompra = 0;
+
+
+            for (
+                const producto
+                of productos
+            ) {
+
+                const cantidad =
+                    Number(
+                        producto.cantidad
+                    );
+
+                const precio =
+                    Number(
+                        producto.precio
+                    );
+
+
+                if (
+                    !Number.isInteger(cantidad) ||
+                    cantidad <= 0 ||
+                    !Number.isFinite(precio) ||
+                    precio < 0
+                ) {
+
+                    throw new Error(
+                        "Los datos de la compra son inválidos."
+                    );
 
                 }
 
-                const idCompra = resultadoCompra.insertId;
 
-                const sqlDetalle = `
-                INSERT INTO Detalle_Compra
-                (
-                    id_compra,
-                    id_producto,
-                    cantidad,
-                    precio_unitario,
-                    subtotal_compra,
-                    total_compra
-                )
-                VALUES
-                (
-                    ?,?,?,?,?,?
-                )
-                `;
-
-                const sqlActualizarStock = `
-                UPDATE Producto
-                SET stock_actual = stock_actual + ?
-                WHERE id_producto = ?
-                `;
-
-                const sqlMovimiento = `
-                INSERT INTO Movimiento_Inventario
-                (
-                    id_producto,
-                    fecha_movimiento,
-                    tipo_movimiento,
-                    cantidad,
-                    referencia_tipo,
-                    observaciones
-                )
-                VALUES
-                (
-                    ?,
-                    NOW(),
-                    'entrada',
-                    ?,
-                    ?,
-                    ?
-                )
-                `;
-
-                let pendientes = productos.length;
-
-                productos.forEach(p => {
-
-                    const subtotal =
-                        Number(p.precio) *
-                        Number(p.cantidad);
-
-                    // ==========================
-                    // DETALLE DE COMPRA
-                    // ==========================
-
-                    db.query(
-
-                        sqlDetalle,
-
-                        [
-
-                            idCompra,
-
-                            p.id_producto,
-
-                            p.cantidad,
-
-                            p.precio,
-
-                            subtotal,
-
-                            subtotal
-
-                        ],
-
-                        err => {
-
-                            if (err) {
-
-                                return db.rollback(() => {
-
-                                    console.error(err);
-
-                                    res.status(500).json({
-
-                                        error: "Error registrando detalle",
-
-                                        detalle: err.sqlMessage
-
-                                    });
-
-                                });
-
-                            }
-
-                            // ==========================
-                            // ACTUALIZAR STOCK
-                            // ==========================
-
-                            db.query(
-
-                                sqlActualizarStock,
-
-                                [
-
-                                    p.cantidad,
-
-                                    p.id_producto
-
-                                ],
-
-                                err => {
-
-                                    if (err) {
-
-                                        return db.rollback(() => {
-
-                                            console.error(err);
-
-                                            res.status(500).json({
-
-                                                error: "Error actualizando stock",
-
-                                                detalle: err.sqlMessage
-
-                                            });
-
-                                        });
-
-                                    }
-
-                                    // ==========================
-                                    // REGISTRAR MOVIMIENTO
-                                    // ==========================
-
-                                    db.query(
-
-                                        sqlMovimiento,
-
-                                        [
-
-                                            p.id_producto,
-
-                                            p.cantidad,
-
-                                            "Compra",
-
-                                            "Compra registrada automáticamente"
-
-                                        ],
-
-                                        err => {
-
-                                            if (err) {
-
-                                                return db.rollback(() => {
-
-                                                    console.error(err);
-
-                                                    res.status(500).json({
-
-                                                        error: "Error registrando movimiento",
-
-                                                        detalle: err.sqlMessage
-
-                                                    });
-
-                                                });
-
-                                            }
-
-                                            pendientes--;
-
-                                            if (pendientes === 0) {
-
-                                                db.commit(err => {
-
-                                                    if (err) {
-
-                                                        return db.rollback(() => {
-
-                                                            console.error(err);
-
-                                                            res.status(500).json({
-
-                                                                error: "Error confirmando compra"
-
-                                                            });
-
-                                                        });
-
-                                                    }
-
-                                                    res.json({
-
-                                                        mensaje: "Compra registrada correctamente"
-
-                                                    });
-
-                                                });
-
-                                            }
-
-                                        }
-
-                                    );
-
-                                }
-
-                            );
-
-                        }
+                totalCompra +=
+                    cantidad * precio;
+
+            }
+
+
+            /* -----------------------------------------
+               CREAR COMPRA
+            ----------------------------------------- */
+
+            const [
+                compraResult
+            ] =
+                await connection.execute(
+
+                    `
+                    INSERT INTO Compra
+                    (
+                        fecha_compra,
+                        id_proveedor,
+                        id_usuario,
+                        total_compra
+                    )
+                    VALUES
+                    (
+                        CURDATE(),
+                        ?,
+                        ?,
+                        ?
+                    )
+                    `,
+
+                    [
+                        proveedor,
+                        usuario,
+                        totalCompra
+                    ]
+
+                );
+
+
+            const idCompra =
+                compraResult.insertId;
+
+
+            /* -----------------------------------------
+               DETALLES DE COMPRA
+            ----------------------------------------- */
+
+            for (
+                const producto
+                of productos
+            ) {
+
+                const idProducto =
+                    Number(
+                        producto.id_producto
+                    );
+
+                const cantidad =
+                    Number(
+                        producto.cantidad
+                    );
+
+                const precio =
+                    Number(
+                        producto.precio
+                    );
+
+                const subtotal =
+                    cantidad * precio;
+
+
+                const [
+                    productoExiste
+                ] =
+                    await connection.execute(
+
+                        `
+                        SELECT
+                            id_producto
+                        FROM Producto
+                        WHERE id_producto = ?
+                        FOR UPDATE
+                        `,
+
+                        [idProducto]
 
                     );
 
-                });
+
+                if (
+                    productoExiste.length === 0
+                ) {
+
+                    throw new Error(
+                        `El producto ID ${idProducto} no existe.`
+                    );
+
+                }
+
+
+                /* -----------------------------------------
+                   INSERTAR DETALLE
+
+                   El trigger:
+                   trg_aumentar_stock
+
+                   aumenta el stock automáticamente.
+                ----------------------------------------- */
+
+                await connection.execute(
+
+                    `
+                    INSERT INTO Detalle_Compra
+                    (
+                        id_compra,
+                        id_producto,
+                        cantidad,
+                        precio_unitario,
+                        subtotal_compra,
+                        total_compra
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    `,
+
+                    [
+                        idCompra,
+                        idProducto,
+                        cantidad,
+                        precio,
+                        subtotal,
+                        subtotal
+                    ]
+
+                );
+
+
+                /* -----------------------------------------
+                   MOVIMIENTO DE INVENTARIO
+                ----------------------------------------- */
+
+                await connection.execute(
+
+                    `
+                    INSERT INTO Movimiento_Inventario
+                    (
+                        id_producto,
+                        fecha_movimiento,
+                        tipo_movimiento,
+                        cantidad,
+                        referencia_tipo,
+                        observaciones
+                    )
+                    VALUES
+                    (
+                        ?,
+                        NOW(),
+                        'entrada',
+                        ?,
+                        'Compra',
+                        'Compra registrada automáticamente'
+                    )
+                    `,
+
+                    [
+                        idProducto,
+                        cantidad
+                    ]
+
+                );
 
             }
 
-        );
 
-    });
+            await connection.commit();
 
-});
 
-// OBTENER USUARIOS
-// ==========================================
+            res.status(201).json({
 
-app.get("/usuarios",(req,res)=>{
+                success: true,
 
-    const sql=`
+                mensaje:
+                    "Compra registrada correctamente.",
 
-    SELECT
+                idCompra,
 
-        u.id_usuario,
-        u.nombre_usuario,
-        u.correo,
-        r.nombre_rol
+                totalCompra
 
-    FROM Usuario u
-
-    INNER JOIN Rol r
-
-    ON u.id_rol=r.id_rol
-
-    ORDER BY u.id_usuario
-
-    `;
-
-    db.query(sql,(err,result)=>{
-
-        if(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-                error:"Error obteniendo usuarios"
             });
 
+        } catch (error) {
+
+            await connection.rollback();
+
+            console.error(
+                "Error registrando compra:",
+                error
+            );
+
+            res.status(400).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "Error registrando compra."
+
+            });
+
+        } finally {
+
+            connection.release();
+
         }
-
-        res.json(result);
-
-    });
-
-});
-// REGISTRAR USUARIO
-// ==========================================
-
-app.post("/usuarios",(req,res)=>{
-
-    const{
-
-        nombre,
-        correo,
-        rol
-
-    }=req.body;
-
-    if(!nombre || !correo || !rol){
-
-        return res.status(400).json({
-            error:"Datos incompletos"
-        });
 
     }
 
-    const sql=`
+);
 
-    INSERT INTO Usuario
 
-    (
+/* =========================================================
+   USUARIOS
+   ========================================================= */
 
-        nombre_usuario,
-        correo,
-        contrasena_hash,
-        id_rol
+app.get(
 
-    )
+    "/usuarios",
 
-    VALUES
+    autenticarToken,
 
-    (?,?,?,?)
+    async (req, res) => {
 
-    `;
+        try {
 
-    db.query(
+            const [
+                result
+            ] =
+                await db.execute(
 
-        sql,
+                    `
+                    SELECT
+                        u.id_usuario,
+                        u.nombre_usuario,
+                        u.correo,
+                        u.id_rol,
+                        r.nombre_rol
+                    FROM Usuario u
+                    INNER JOIN Rol r
+                        ON u.id_rol =
+                           r.id_rol
+                    ORDER BY
+                        u.id_usuario
+                    `
 
-        [
+                );
 
-            nombre,
 
-            correo,
+            res.json(result);
 
-            '123456',
+        } catch (error) {
 
-            rol
+            console.error(error);
 
-        ],
+            res.status(500).json({
 
-        (err,result)=>{
+                success: false,
 
-            if(err){
+                error:
+                    "Error obteniendo usuarios."
 
-                console.error(err);
+            });
 
-                return res.status(500).json({
+        }
 
-                    error:"Error registrando usuario",
+    }
 
-                    detalle:err.sqlMessage
+);
+
+
+/* =========================================================
+   REGISTRAR USUARIO ADMINISTRATIVO
+   ========================================================= */
+
+app.post(
+
+    "/usuarios",
+
+    autenticarToken,
+
+    [
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .isLength({
+                max: 100
+            }),
+
+        body("correo")
+            .trim()
+            .isEmail()
+            .normalizeEmail(),
+
+        body("rol")
+            .isInt({
+                min: 1
+            }),
+
+        body("password")
+            .optional({
+                nullable: true
+            })
+            .isLength({
+                min: 6,
+                max: 100
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const {
+                nombre,
+                correo,
+                rol
+            } = req.body;
+
+
+            const password =
+                req.body.password ||
+                "MicroStock123";
+
+
+            const [
+                existe
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_usuario
+                    FROM Usuario
+                    WHERE correo = ?
+                    `,
+
+                    [correo]
+
+                );
+
+
+            if (
+                existe.length > 0
+            ) {
+
+                return res.status(409).json({
+
+                    success: false,
+
+                    error:
+                        "El correo ya está registrado."
 
                 });
 
             }
+
+
+            const [
+                rolExiste
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_rol
+                    FROM Rol
+                    WHERE id_rol = ?
+                    `,
+
+                    [rol]
+
+                );
+
+
+            if (
+                rolExiste.length === 0
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "El rol seleccionado no existe."
+
+                });
+
+            }
+
+
+            const passwordHash =
+                await bcrypt.hash(
+                    password,
+                    10
+                );
+
+
+            await db.execute(
+
+                `
+                INSERT INTO Usuario
+                (
+                    nombre_usuario,
+                    correo,
+                    contrasena_hash,
+                    id_rol
+                )
+                VALUES (?, ?, ?, ?)
+                `,
+
+                [
+                    nombre,
+                    correo,
+                    passwordHash,
+                    rol
+                ]
+
+            );
+
+
+            res.status(201).json({
+
+                success: true,
+
+                mensaje:
+                    "Usuario registrado correctamente."
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error registrando usuario."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   MOVIMIENTOS DE INVENTARIO
+   ========================================================= */
+
+app.get(
+
+    "/movimientos",
+
+    autenticarToken,
+
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        m.id_movimiento,
+                        m.fecha_movimiento,
+                        m.id_producto,
+                        p.nombre_producto,
+                        m.tipo_movimiento,
+                        m.cantidad,
+                        m.referencia_tipo,
+                        m.observaciones
+                    FROM Movimiento_Inventario m
+                    INNER JOIN Producto p
+                        ON m.id_producto =
+                           p.id_producto
+                    ORDER BY
+                        m.fecha_movimiento DESC,
+                        m.id_movimiento DESC
+                    `
+
+                );
+
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error obteniendo movimientos."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   ALERTAS DE INVENTARIO
+   ========================================================= */
+
+app.get(
+
+    "/alertas",
+
+    autenticarToken,
+
+    async (req, res) => {
+
+        try {
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    SELECT
+                        id_producto,
+                        nombre_producto,
+                        stock_actual,
+                        stock_minimo,
+
+                        CASE
+                            WHEN stock_actual <=
+                                 stock_minimo * 0.5
+                            THEN 'Crítico'
+                            ELSE 'Bajo'
+                        END AS prioridad
+
+                    FROM Producto
+
+                    WHERE stock_actual <=
+                          stock_minimo
+
+                    ORDER BY
+                        stock_actual ASC
+                    `
+
+                );
+
+
+            res.json(result);
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error obteniendo alertas."
+
+            });
+
+        }
+
+    }
+
+);
+
+
+/* =========================================================
+   ACTUALIZAR STOCK MÍNIMO
+   ========================================================= */
+
+app.put(
+
+    "/productos/minimo/:id",
+
+    autenticarToken,
+
+    [
+
+        param("id")
+            .isInt({
+                min: 1
+            }),
+
+        body("minimo")
+            .isInt({
+                min: 0
+            })
+
+    ],
+
+    validarRequest,
+
+    async (req, res) => {
+
+        try {
+
+            const id =
+                Number(
+                    req.params.id
+                );
+
+            const minimo =
+                Number(
+                    req.body.minimo
+                );
+
+
+            const [
+                result
+            ] =
+                await db.execute(
+
+                    `
+                    UPDATE Producto
+                    SET stock_minimo = ?
+                    WHERE id_producto = ?
+                    `,
+
+                    [
+                        minimo,
+                        id
+                    ]
+
+                );
+
+
+            if (
+                result.affectedRows === 0
+            ) {
+
+                return res.status(404).json({
+
+                    success: false,
+
+                    error:
+                        "Producto no encontrado."
+
+                });
+
+            }
+
 
             res.json({
 
-                mensaje:"Usuario registrado correctamente"
+                success: true,
+
+                mensaje:
+                    "Stock mínimo actualizado."
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error actualizando stock mínimo."
 
             });
 
         }
 
-    );
+    }
 
-});
-// OBTENER MOVIMIENTOS DE INVENTARIO
-// ==========================================
+);
 
-app.get("/movimientos", (req, res) => {
 
-    const sql = `
+/* =========================================================
+   REPONER STOCK
+   ========================================================= */
 
-    SELECT
+app.put(
 
-        m.id_movimiento,
-        m.fecha_movimiento,
-        p.nombre_producto,
-        m.tipo_movimiento,
-        m.cantidad,
-        m.referencia_tipo,
-        m.observaciones
+    "/productos/:id/reponer",
 
-    FROM Movimiento_Inventario m
+    autenticarToken,
 
-    INNER JOIN Producto p
+    [
 
-        ON m.id_producto = p.id_producto
+        param("id")
+            .isInt({
+                min: 1
+            }),
 
-    ORDER BY m.fecha_movimiento DESC
+        body("cantidad")
+            .isInt({
+                min: 1
+            })
 
-    `;
+    ],
 
-    db.query(sql, (err, result) => {
+    validarRequest,
 
-        if (err) {
+    async (req, res) => {
 
-            console.error(err);
+        const connection =
+            await db.getConnection();
 
-            return res.status(500).json({
-                error: "Error obteniendo movimientos"
-            });
+        try {
 
-        }
+            const id =
+                Number(
+                    req.params.id
+                );
 
-        res.json(result);
+            const cantidad =
+                Number(
+                    req.body.cantidad
+                );
 
-    });
 
-});
-// OBTENER ALERTAS DE STOCK
-// ==========================================
+            await connection.beginTransaction();
 
-app.get("/alertas", (req, res) => {
 
-    const sql = `
+            const [
+                producto
+            ] =
+                await connection.execute(
 
-    SELECT
+                    `
+                    SELECT
+                        id_producto
+                    FROM Producto
+                    WHERE id_producto = ?
+                    FOR UPDATE
+                    `,
 
-        id_producto,
-        nombre_producto,
-        stock_actual,
-        stock_minimo,
+                    [id]
 
-        CASE
+                );
 
-            WHEN stock_actual <= stock_minimo * 0.5
-                THEN 'Crítico'
 
-            ELSE 'Bajo'
+            if (
+                producto.length === 0
+            ) {
 
-        END AS prioridad
-
-    FROM Producto
-
-    WHERE stock_actual <= stock_minimo
-
-    ORDER BY stock_actual ASC
-
-    `;
-
-    db.query(sql,(err,result)=>{
-
-        if(err){
-
-            console.error(err);
-
-            return res.status(500).json({
-
-                error:"Error obteniendo alertas"
-
-            });
-
-        }
-
-        res.json(result);
-
-    });
-
-});
-// ACTUALIZAR STOCK MÍNIMO
-// ==========================================
-
-app.put("/productos/minimo/:id",(req,res)=>{
-
-    const id=req.params.id;
-
-    const { minimo }=req.body;
-
-    const sql=`
-
-    UPDATE Producto
-
-    SET stock_minimo=?
-
-    WHERE id_producto=?
-
-    `;
-
-    db.query(
-
-        sql,
-
-        [
-
-            minimo,
-
-            id
-
-        ],
-
-        (err,result)=>{
-
-            if(err){
-
-                console.error(err);
-
-                return res.status(500).json({
-
-                    error:"Error actualizando stock mínimo"
-
-                });
+                throw new Error(
+                    "Producto no encontrado."
+                );
 
             }
 
-            res.json({
 
-                mensaje:"Stock mínimo actualizado"
+            /*
+             * Aquí NO existe trigger.
+             * Por eso actualizamos directamente.
+             */
 
-            });
+            await connection.execute(
 
-        }
+                `
+                UPDATE Producto
+                SET stock_actual =
+                    stock_actual + ?
+                WHERE id_producto = ?
+                `,
 
-    );
+                [
+                    cantidad,
+                    id
+                ]
 
-});
-// REPONER STOCK
-// ==========================================
+            );
 
-app.put("/productos/:id/reponer",(req,res)=>{
 
-    const id = req.params.id;
-    const { cantidad } = req.body;
+            await connection.execute(
 
-    const sqlActualizar = `
-        UPDATE Producto
-        SET stock_actual = stock_actual + ?
-        WHERE id_producto = ?
-    `;
-
-    db.query(
-
-        sqlActualizar,
-
-        [cantidad,id],
-
-        (err)=>{
-
-            if(err){
-
-                console.error(err);
-
-                return res.status(500).json({
-                    error:"Error actualizando stock"
-                });
-
-            }
-
-            const sqlMovimiento = `
+                `
                 INSERT INTO Movimiento_Inventario
                 (
                     id_producto,
@@ -1274,177 +2933,277 @@ app.put("/productos/:id/reponer",(req,res)=>{
                     'Reposición Manual',
                     'Reposición realizada desde Alertas'
                 )
-            `;
-
-            db.query(
-
-                sqlMovimiento,
+                `,
 
                 [
-
                     id,
-
                     cantidad
-
-                ],
-
-                (err)=>{
-
-                    if(err){
-
-                        console.error(err);
-
-                        return res.status(500).json({
-                            error:"Error registrando movimiento"
-                        });
-
-                    }
-
-                    res.json({
-
-                        mensaje:"Stock actualizado correctamente"
-
-                    });
-
-                }
+                ]
 
             );
 
+
+            await connection.commit();
+
+
+            res.json({
+
+                success: true,
+
+                mensaje:
+                    "Stock actualizado correctamente."
+
+            });
+
+        } catch (error) {
+
+            await connection.rollback();
+
+            console.error(
+                "Error reponiendo stock:",
+                error
+            );
+
+            res.status(400).json({
+
+                success: false,
+
+                error:
+                    error.message ||
+                    "Error actualizando stock."
+
+            });
+
+        } finally {
+
+            connection.release();
+
         }
 
-    );
+    }
 
-});
-// DASHBOARD
-// ==========================================
+);
 
-app.get("/dashboard",(req,res)=>{
 
-    const dashboard={};
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
 
-    const sqlProductos=`
+app.get(
 
-        SELECT COUNT(*) AS total
+    "/dashboard",
 
-        FROM Producto
+    autenticarToken,
 
-    `;
+    async (req, res) => {
 
-    const sqlAlertas=`
+        try {
 
-        SELECT COUNT(*) AS total
+            const [
+                productos
+            ] =
+                await db.execute(
 
-        FROM Producto
+                    `
+                    SELECT
+                        COUNT(*) AS total
+                    FROM Producto
+                    `
 
-        WHERE stock_actual<=stock_minimo
+                );
 
-    `;
 
-    const sqlMovimientos=`
+            const [
+                alertas
+            ] =
+                await db.execute(
 
-        SELECT COUNT(*) AS total
+                    `
+                    SELECT
+                        COUNT(*) AS total
+                    FROM Producto
+                    WHERE stock_actual <=
+                          stock_minimo
+                    `
 
-        FROM Movimiento_Inventario
+                );
 
-    `;
 
-    db.query(sqlProductos,(err,productos)=>{
+            const [
+                movimientos
+            ] =
+                await db.execute(
 
-        if(err){
+                    `
+                    SELECT
+                        COUNT(*) AS total
+                    FROM Movimiento_Inventario
+                    `
 
-            console.error(err);
+                );
 
-            return res.status(500).json({
 
-                error:"Error obteniendo productos"
+            res.json({
+
+                success: true,
+
+                totalProductos:
+                    productos[0].total,
+
+                totalAlertas:
+                    alertas[0].total,
+
+                totalMovimientos:
+                    movimientos[0].total
+
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+
+                success: false,
+
+                error:
+                    "Error obteniendo información del dashboard."
 
             });
 
         }
 
-        dashboard.totalProductos=productos[0].total;
+    }
 
-        db.query(sqlAlertas,(err,alertas)=>{
+);
 
-            if(err){
 
-                console.error(err);
+/* =========================================================
+   RUTA NO ENCONTRADA
+   ========================================================= */
 
-                return res.status(500).json({
+app.use(
+    (req, res) => {
 
-                    error:"Error obteniendo alertas"
+        res.status(404).json({
 
-                });
+            success: false,
 
-            }
-
-            dashboard.totalAlertas=alertas[0].total;
-
-            db.query(sqlMovimientos,(err,movimientos)=>{
-
-                if(err){
-
-                    console.error(err);
-
-                    return res.status(500).json({
-
-                        error:"Error obteniendo movimientos"
-
-                    });
-
-                }
-
-                dashboard.totalMovimientos=movimientos[0].total;
-
-                res.json(dashboard);
-
-            });
+            message:
+                "Endpoint no encontrado."
 
         });
 
-    });
+    }
+);
 
-});
 
-// DASHBOARD
-// ==========================================
+/* =========================================================
+   MANEJO GLOBAL DE ERRORES
+   ========================================================= */
 
-async function cargarDashboard(){
+app.use(
+    (
+        error,
+        req,
+        res,
+        next
+    ) => {
 
-    const respuesta=
-    await fetch("http://localhost:3000/dashboard");
+        console.error(
+            "Error no controlado:",
+            error
+        );
 
-    const datos=
-    await respuesta.json();
+        res.status(500).json({
 
-    const productos=
-    document.getElementById("totalProductos");
+            success: false,
 
-    if(productos){
+            message:
+                "Ocurrió un error interno en el servidor."
 
-        productos.innerText=
-        datos.totalProductos;
+        });
 
     }
+);
 
-    const alertas=
-    document.getElementById("totalAlertas");
 
-    if(alertas){
+/* =========================================================
+   INICIAR SERVIDOR
+   ========================================================= */
 
-        alertas.innerText=
-        datos.totalAlertas;
+async function iniciarServidor() {
 
-    }
+    try {
 
-    const movimientos=
-    document.getElementById("totalMovimientos");
+        const connection =
+            await db.getConnection();
 
-    if(movimientos){
 
-        movimientos.innerText=
-        datos.totalMovimientos;
+        await connection.ping();
+
+
+        connection.release();
+
+
+        console.log(
+            "=========================================="
+        );
+
+        console.log(
+            "Conectado correctamente a MySQL."
+        );
+
+        console.log(
+            `Base de datos: ${
+                process.env.DB_NAME ||
+                "MicroStock"
+            }`
+        );
+
+        console.log(
+            "=========================================="
+        );
+
+
+        app.listen(
+            PORT,
+            () => {
+
+                console.log(
+                    `Servidor corriendo en http://localhost:${PORT}`
+                );
+
+                console.log(
+                    "API de MicroStock lista."
+                );
+
+            }
+        );
+
+    } catch (error) {
+
+        console.error(
+            "=========================================="
+        );
+
+        console.error(
+            "ERROR: No fue posible conectar con MySQL."
+        );
+
+        console.error(
+            error.message
+        );
+
+        console.error(
+            "=========================================="
+        );
+
+        process.exit(1);
 
     }
 
 }
+
+
+iniciarServidor();

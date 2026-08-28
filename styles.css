@@ -1,109 +1,775 @@
-body{
-font-family:Segoe UI,Arial;
-margin:0;
-background:#eef2f7;
+/* =========================================================
+   MICROSTOCK - ESTILOS GENERALES
+   ========================================================= */
+
+:root {
+    --primary: #882BF5;
+    --primary-dark: #6820c7;
+    --primary-light: #a75cff;
+
+    --secondary: #1abc9c;
+    --secondary-dark: #16a085;
+
+    --navy: #17233c;
+    --navy-light: #34495e;
+
+    --white: #ffffff;
+    --background: #eef2f7;
+
+    --text: #263238;
+    --text-light: #667085;
+
+    --border: #d0d5dd;
+
+    --danger: #dc3545;
+    --danger-light: #fde8ea;
+
+    --success: #198754;
+    --success-light: #e8f7ef;
+
+    --warning: #f39c12;
+
+    --shadow:
+        0 8px 25px rgba(0, 0, 0, 0.10);
+
+    --shadow-hover:
+        0 12px 30px rgba(0, 0, 0, 0.16);
+
+    --radius: 10px;
 }
 
-header{
-background:#882BF5;
-color:white;
-padding:15px;
-text-align:center;
+
+/* =========================================================
+   RESET
+   ========================================================= */
+
+* {
+    box-sizing: border-box;
 }
 
-nav{
-background:#882BF5;
+html {
+    scroll-behavior: smooth;
 }
 
-nav ul{
-display:flex;
-flex-wrap:wrap;
-margin:0;
-padding:0;
-list-style:none;
+body {
+    font-family:
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
+    margin: 0;
+
+    background: var(--background);
+
+    color: var(--text);
+
+    line-height: 1.5;
 }
 
-nav li{margin:4px;}
-
-nav a{
-color:white;
-text-decoration:none;
-padding:10px 14px;
-display:block;
-border-radius:4px;
+button,
+input,
+select,
+textarea {
+    font-family: inherit;
 }
 
-nav a:hover{background:#1abc9c;}
 
-.container{padding:25px;}
+/* =========================================================
+   HEADER
+   ========================================================= */
 
-.card-grid{
-display:flex;
-flex-wrap:wrap;
-gap:20px;
+header {
+    background: var(--primary);
+
+    color: var(--white);
+
+    padding: 15px;
+
+    text-align: center;
 }
 
-.card{
-background:white;
-padding:20px;
-border-radius:6px;
-box-shadow:0 3px 6px rgba(0,0,0,0.15);
-min-width:180px;
-flex:1;
-text-align:center;
+header h1 {
+    margin: 0;
 }
 
-.form-box{
-background:white;
-padding:20px;
-border-radius:6px;
-margin-bottom:25px;
-box-shadow:0 3px 6px rgba(0,0,0,0.15);
-max-width:450px;
+
+/* =========================================================
+   NAVIGATION
+   ========================================================= */
+
+nav {
+    background: var(--primary);
 }
 
-.form-box input,select{
-width:100%;
-padding:8px;
-margin-top:6px;
-margin-bottom:12px;
-border:1px solid #ccc;
-border-radius:4px;
+nav ul {
+    display: flex;
+
+    flex-wrap: wrap;
+
+    margin: 0;
+
+    padding: 0;
+
+    list-style: none;
+
+    justify-content: center;
 }
 
-button{
-background:#1abc9c;
-border:none;
-padding:10px 14px;
-color:white;
-border-radius:4px;
-cursor:pointer;
+nav li {
+    margin: 4px;
 }
 
-button:hover{background:#16a085;}
+nav a {
+    color: var(--white);
 
-table{
-width:100%;
-border-collapse:collapse;
-background:white;
-box-shadow:0 2px 5px rgba(0,0,0,0.1);
+    text-decoration: none;
+
+    padding: 10px 14px;
+
+    display: block;
+
+    border-radius: 6px;
+
+    transition:
+        background 0.2s ease,
+        transform 0.2s ease;
 }
 
-th{
-background:#34495e;
-color:white;
-padding:10px;
+nav a:hover {
+    background: var(--secondary);
+
+    transform: translateY(-1px);
 }
 
-td{
-padding:10px;
-border-bottom:1px solid #ddd;
-text-align:center;
+
+/* =========================================================
+   CONTENEDOR
+   ========================================================= */
+
+.container {
+    padding: 25px;
+
+    max-width: 1400px;
+
+    margin: 0 auto;
 }
 
-tr:hover{background:#f5f5f5;}
 
-.alerta{
-color:red;
-font-weight:bold;
+/* =========================================================
+   TARJETAS
+   ========================================================= */
+
+.card-grid {
+    display: flex;
+
+    flex-wrap: wrap;
+
+    gap: 20px;
+}
+
+.card {
+    background: var(--white);
+
+    padding: 20px;
+
+    border-radius: var(--radius);
+
+    box-shadow: var(--shadow);
+
+    min-width: 180px;
+
+    flex: 1;
+
+    text-align: center;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-3px);
+
+    box-shadow: var(--shadow-hover);
+}
+
+
+/* =========================================================
+   FORMULARIOS GENERALES
+   ========================================================= */
+
+.form-box {
+    background: var(--white);
+
+    padding: 25px;
+
+    border-radius: var(--radius);
+
+    margin-bottom: 25px;
+
+    box-shadow: var(--shadow);
+
+    max-width: 500px;
+}
+
+.form-box input,
+.form-box select,
+.form-box textarea {
+    width: 100%;
+
+    padding: 11px 12px;
+
+    margin-top: 6px;
+
+    margin-bottom: 12px;
+
+    border: 1px solid var(--border);
+
+    border-radius: 6px;
+
+    background: var(--white);
+
+    color: var(--text);
+
+    outline: none;
+
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.form-box input:focus,
+.form-box select:focus,
+.form-box textarea:focus {
+    border-color: var(--primary);
+
+    box-shadow:
+        0 0 0 3px rgba(136, 43, 245, 0.12);
+}
+
+
+/* =========================================================
+   BOTONES
+   ========================================================= */
+
+button {
+    background: var(--secondary);
+
+    border: none;
+
+    padding: 10px 16px;
+
+    color: var(--white);
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+    font-weight: 600;
+
+    transition:
+        background 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+button:hover {
+    background: var(--secondary-dark);
+
+    transform: translateY(-1px);
+
+    box-shadow:
+        0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+button:disabled {
+    opacity: 0.65;
+
+    cursor: not-allowed;
+
+    transform: none;
+}
+
+
+/* =========================================================
+   TABLAS
+   ========================================================= */
+
+table {
+    width: 100%;
+
+    border-collapse: collapse;
+
+    background: var(--white);
+
+    box-shadow:
+        0 2px 5px rgba(0, 0, 0, 0.1);
+
+    border-radius: 8px;
+
+    overflow: hidden;
+}
+
+th {
+    background: var(--navy-light);
+
+    color: var(--white);
+
+    padding: 10px;
+}
+
+td {
+    padding: 10px;
+
+    border-bottom: 1px solid #ddd;
+
+    text-align: center;
+}
+
+tr:hover {
+    background: #f5f5f5;
+}
+
+
+/* =========================================================
+   ALERTAS
+   ========================================================= */
+
+.alerta {
+    color: var(--danger);
+
+    font-weight: bold;
+}
+
+.error {
+    color: var(--danger);
+}
+
+.success {
+    color: var(--success);
+}
+
+
+/* =========================================================
+   AUTENTICACIÓN
+   ========================================================= */
+
+.auth-page {
+    min-height: 100vh;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 30px 15px;
+
+    background:
+        linear-gradient(
+            135deg,
+            #f0e8ff 0%,
+            #eef2f7 50%,
+            #e5faf5 100%
+        );
+}
+
+.auth-container {
+    width: 100%;
+
+    max-width: 450px;
+}
+
+.auth-card {
+    background: var(--white);
+
+    border-radius: 16px;
+
+    padding: 35px;
+
+    box-shadow:
+        0 15px 45px rgba(0, 0, 0, 0.14);
+
+    transition:
+        transform 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.auth-card:hover {
+    transform: translateY(-3px);
+
+    box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.17);
+}
+
+.auth-card-register {
+    max-width: 100%;
+}
+
+
+/* =========================================================
+   ENCABEZADO AUTH
+   ========================================================= */
+
+.auth-header {
+    text-align: center;
+
+    margin-bottom: 25px;
+}
+
+.auth-logo {
+    width: 65px;
+
+    height: 65px;
+
+    margin: 0 auto 15px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    border-radius: 18px;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--primary-light)
+        );
+
+    color: var(--white);
+
+    font-size: 22px;
+
+    font-weight: bold;
+
+    box-shadow:
+        0 8px 20px rgba(136, 43, 245, 0.25);
+}
+
+.auth-header h1 {
+    margin: 0 0 6px;
+
+    color: var(--navy);
+
+    font-size: 28px;
+}
+
+.auth-header p {
+    margin: 0;
+
+    color: var(--text-light);
+}
+
+
+/* =========================================================
+   CAMPOS AUTH
+   ========================================================= */
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+
+    margin-bottom: 6px;
+
+    color: var(--navy);
+
+    font-weight: 600;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+
+    padding: 12px 13px;
+
+    border: 1px solid var(--border);
+
+    border-radius: 7px;
+
+    background: var(--white);
+
+    color: var(--text);
+
+    outline: none;
+
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: var(--primary);
+
+    box-shadow:
+        0 0 0 3px rgba(136, 43, 245, 0.13);
+}
+
+.form-group input::placeholder {
+    color: #98a2b3;
+}
+
+
+/* =========================================================
+   CONTRASEÑA
+   ========================================================= */
+
+.password-wrapper {
+    position: relative;
+
+    display: flex;
+
+    align-items: center;
+}
+
+.password-wrapper input {
+    padding-right: 85px;
+}
+
+.password-toggle {
+    position: absolute;
+
+    right: 6px;
+
+    top: 50%;
+
+    transform: translateY(-50%);
+
+    padding: 6px 9px;
+
+    background: transparent;
+
+    color: var(--primary);
+
+    box-shadow: none;
+
+    font-size: 13px;
+}
+
+.password-toggle:hover {
+    background: #f1e8ff;
+
+    color: var(--primary-dark);
+
+    transform: translateY(-50%);
+}
+
+
+/* =========================================================
+   ERRORES DE CAMPOS
+   ========================================================= */
+
+.field-error {
+    display: block;
+
+    min-height: 18px;
+
+    margin-top: 4px;
+
+    color: var(--danger);
+
+    font-size: 13px;
+}
+
+.input-error {
+    border-color: var(--danger) !important;
+
+    box-shadow:
+        0 0 0 3px rgba(220, 53, 69, 0.10) !important;
+}
+
+
+/* =========================================================
+   MENSAJES
+   ========================================================= */
+
+.form-message {
+    display: none;
+
+    margin-bottom: 18px;
+
+    padding: 11px 13px;
+
+    border-radius: 7px;
+
+    font-size: 14px;
+
+    font-weight: 600;
+}
+
+.form-message.error-message {
+    display: block;
+
+    background: var(--danger-light);
+
+    color: var(--danger);
+
+    border: 1px solid #f5c2c7;
+}
+
+.form-message.success-message {
+    display: block;
+
+    background: var(--success-light);
+
+    color: var(--success);
+
+    border: 1px solid #badbcc;
+}
+
+
+/* =========================================================
+   BOTÓN PRINCIPAL
+   ========================================================= */
+
+.btn-primary {
+    width: 100%;
+
+    padding: 12px 18px;
+
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--primary-light)
+        );
+
+    color: var(--white);
+
+    border: none;
+
+    border-radius: 7px;
+
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.btn-primary:hover {
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary-dark),
+            var(--primary)
+        );
+
+    transform: translateY(-2px);
+
+    box-shadow:
+        0 7px 18px rgba(136, 43, 245, 0.25);
+}
+
+.btn-primary:disabled {
+    opacity: 0.65;
+
+    cursor: wait;
+
+    transform: none;
+}
+
+.btn-full {
+    width: 100%;
+}
+
+
+/* =========================================================
+   FOOTER AUTH
+   ========================================================= */
+
+.auth-footer {
+    margin-top: 22px;
+
+    text-align: center;
+
+    color: var(--text-light);
+
+    font-size: 14px;
+}
+
+.auth-footer a {
+    color: var(--primary);
+
+    font-weight: 700;
+
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    color: var(--primary-dark);
+
+    text-decoration: underline;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 768px) {
+
+    .container {
+        padding: 18px;
+    }
+
+    nav ul {
+        justify-content: flex-start;
+    }
+
+    .card-grid {
+        flex-direction: column;
+    }
+
+    .form-box {
+        max-width: 100%;
+    }
+
+    table {
+        display: block;
+
+        overflow-x: auto;
+
+        white-space: nowrap;
+    }
+
+    .auth-card {
+        padding: 25px 20px;
+    }
+
+}
+
+@media (max-width: 480px) {
+
+    .auth-page {
+        padding: 15px;
+    }
+
+    .auth-card {
+        padding: 22px 17px;
+
+        border-radius: 12px;
+    }
+
+    .auth-header h1 {
+        font-size: 24px;
+    }
+
+    .auth-logo {
+        width: 55px;
+
+        height: 55px;
+
+        border-radius: 15px;
+    }
+
 }
