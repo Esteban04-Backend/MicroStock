@@ -9,6 +9,43 @@
 <link rel="stylesheet" href="styles.css">
 <script defer src="script.js"></script>
 
+<style>
+
+.nav-logout{
+
+background:#c0392b;
+color:white;
+border:none;
+padding:8px 14px;
+border-radius:4px;
+cursor:pointer;
+font-size:14px;
+
+}
+
+.nav-logout:hover{
+
+background:#a93226;
+
+}
+
+nav ul{
+
+display:flex;
+align-items:center;
+flex-wrap:wrap;
+gap:10px;
+
+}
+
+.nav-spacer{
+
+margin-left:auto;
+
+}
+
+</style>
+
 </head>
 
 <body>
@@ -35,6 +72,20 @@
 <li><a href="movimientos_inventario.html">Movimientos</a></li>
 <li><a href="alertas_stock.html">Alertas</a></li>
 <li><a href="usuarios.html">Usuarios</a></li>
+
+<!--
+    script.js ya trae la función logout() y busca automáticamente
+    un elemento con id="logoutButton" para engancharle el evento
+    click (ver script.js, sección LOGOUT, al final del archivo).
+    Sin este botón en el HTML, esa función nunca se conecta a nada,
+    por eso no aparecía "Cerrar sesión" ni funcionaba en ninguna
+    página, aunque script.js ya estuviera cargado.
+-->
+<li class="nav-spacer">
+    <button id="logoutButton" class="nav-logout" type="button">
+        Cerrar sesión
+    </button>
+</li>
 
 </ul>
 

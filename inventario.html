@@ -8,6 +8,9 @@
 
 <link rel="stylesheet" href="styles.css">
 
+<!-- Necesario para apiFetch(), getToken() y escapeHTML() -->
+<script src="script.js" defer></script>
+
 <style>
 
 .inventario-container{
@@ -91,6 +94,12 @@ background:#ffebee;
 
 background:#e8f5e9;
 
+}
+
+.sin-resultados td{
+text-align:center;
+color:#777;
+padding:20px 0;
 }
 
 </style>
@@ -190,134 +199,134 @@ background:#e8f5e9;
 </div>
 
 <script>
+
 // Arreglo global que almacena los productos obtenidos desde MySQL
-let productos=[];
+let productos = [];
+
 // Consulta los productos registrados y construye el inventario dinámicamente
 async function cargarInventario(){
-// Solicita los datos de productos al servidor Node.js
-    const respuesta =
-    await fetch(
-    "http://localhost:3000/productos"
-    );
 
-    productos =
-    await respuesta.json();
+    try{
 
-    const tabla =
-    document.getElementById(
-    "tablaInventario"
-    );
+        // apiFetch() agrega el header "Authorization: Bearer <token>"
+        // que exige el backend. Con fetch() directo la respuesta es
+        // 401 y la tabla queda vacía sin ningún aviso.
+        const respuesta = await apiFetch("/productos");
+        const data = await getJSON(respuesta);
 
-    tabla.innerHTML="";
+        if(!respuesta.ok){
 
-    let stockTotal=0;
-    let valorInventario=0;
-// Recorre cada producto para calcular métricas y construir la tabla
-    productos.forEach(p=>{
+            console.error("Error obteniendo productos:", data);
+            document.getElementById("tablaInventario").innerHTML =
+                `<tr class="sin-resultados"><td colspan="5">
+                    ${escapeHTML(data.error || data.message || "No se pudo cargar el inventario.")}
+                </td></tr>`;
+            return;
 
-        stockTotal +=
-        Number(p.stock_actual);
-
-        valorInventario +=
-        Number(p.stock_actual)
-        *
-        Number(p.precio_unitario);
-
-        let estado="Normal";
-        let clase="stock-normal";
-// Verifica si el producto se encuentra por debajo del stock mínimo
-        if(
-            p.stock_actual
-            <=
-            p.stock_minimo
-        ){
-            estado="Stock Bajo";
-            clase="stock-bajo";
         }
 
-        tabla.innerHTML += `
-        <tr class="${clase}">
-            <td>${p.nombre_producto}</td>
-            <td>${p.precio_unitario}</td>
-            <td>${p.stock_actual}</td>
-            <td>${p.stock_minimo}</td>
-            <td>${estado}</td>
-        </tr>
-        `;
-    });
+        productos = data;
 
-    document.getElementById(
-    "totalProductos"
-    ).innerText =
-    productos.length;
+        renderizarInventario(productos);
 
-    document.getElementById(
-    "stockTotal"
-    ).innerText =
-    stockTotal;
+    }catch(error){
 
-    document.getElementById(
-    "valorInventario"
-    ).innerText =
-    valorInventario;
+        console.error("Error cargando inventario:", error);
+        document.getElementById("tablaInventario").innerHTML =
+            `<tr class="sin-resultados"><td colspan="5">Error de conexión con el servidor.</td></tr>`;
+
+    }
 
 }
+
+
+function renderizarInventario(lista){
+
+    const tabla = document.getElementById("tablaInventario");
+
+    tabla.innerHTML = "";
+
+    if(lista.length === 0){
+
+        tabla.innerHTML =
+            `<tr class="sin-resultados"><td colspan="5">No hay productos registrados.</td></tr>`;
+
+    }
+
+    let stockTotal = 0;
+    let valorInventario = 0;
+
+    // Recorre cada producto para calcular métricas y construir la tabla
+    lista.forEach(p => {
+
+        stockTotal += Number(p.stock_actual);
+        valorInventario += Number(p.stock_actual) * Number(p.precio_unitario);
+
+        let estado = "Normal";
+        let clase = "stock-normal";
+
+        // Verifica si el producto se encuentra por debajo del stock mínimo
+        if(p.stock_actual <= p.stock_minimo){
+
+            estado = "Stock Bajo";
+            clase = "stock-bajo";
+
+        }
+
+        const fila = document.createElement("tr");
+        fila.className = clase;
+
+        fila.innerHTML = `
+            <td>${escapeHTML(p.nombre_producto)}</td>
+            <td>${escapeHTML(p.precio_unitario)}</td>
+            <td>${escapeHTML(p.stock_actual)}</td>
+            <td>${escapeHTML(p.stock_minimo)}</td>
+            <td>${estado}</td>
+        `;
+
+        tabla.appendChild(fila);
+
+    });
+
+    // Las métricas se calculan siempre sobre el catálogo completo,
+    // no sobre el resultado de una búsqueda filtrada.
+    document.getElementById("totalProductos").innerText = productos.length;
+
+    let stockTotalGlobal = 0;
+    let valorInventarioGlobal = 0;
+
+    productos.forEach(p => {
+
+        stockTotalGlobal += Number(p.stock_actual);
+        valorInventarioGlobal += Number(p.stock_actual) * Number(p.precio_unitario);
+
+    });
+
+    document.getElementById("stockTotal").innerText = stockTotalGlobal;
+    document.getElementById("valorInventario").innerText = valorInventarioGlobal.toFixed(2);
+
+}
+
+
 // Filtra productos en tiempo real según el texto ingresado
 function buscarProducto(){
 
-    const texto =
-    document
-    .getElementById(
-    "buscarProducto"
-    )
-    .value
-    .toLowerCase();
+    const texto = document
+        .getElementById("buscarProducto")
+        .value
+        .toLowerCase();
 
-    const filtrados =
-    productos.filter(p=>
-
-        p.nombre_producto
-        .toLowerCase()
-        .includes(texto)
-
+    const filtrados = productos.filter(p =>
+        p.nombre_producto.toLowerCase().includes(texto)
     );
 
-    const tabla =
-    document.getElementById(
-    "tablaInventario"
-    );
-
-    tabla.innerHTML="";
-
-    filtrados.forEach(p=>{
-
-        let estado="Normal";
-        let clase="stock-normal";
-
-        if(
-            p.stock_actual
-            <=
-            p.stock_minimo
-        ){
-            estado="Stock Bajo";
-            clase="stock-bajo";
-        }
-
-        tabla.innerHTML += `
-        <tr class="${clase}">
-            <td>${p.nombre_producto}</td>
-            <td>${p.precio_unitario}</td>
-            <td>${p.stock_actual}</td>
-            <td>${p.stock_minimo}</td>
-            <td>${estado}</td>
-        </tr>
-        `;
-
-    });
+    renderizarInventario(filtrados);
 
 }
+
+
 // Inicializa la carga de inventario al abrir la página
-cargarInventario();
+document.addEventListener("DOMContentLoaded", cargarInventario);
 
 </script>
 

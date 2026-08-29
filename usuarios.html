@@ -8,6 +8,10 @@
 
 <link rel="stylesheet" href="styles.css">
 
+<!-- Necesario para apiFetch(), getToken(), escapeHTML() y para
+     enganchar el botón "logoutButton" con la función logout() -->
+<script src="script.js" defer></script>
+
 <style>
 
 .roles-grid{
@@ -62,6 +66,31 @@ cursor:pointer;
 background:#34495e;
 }
 
+.nav-logout{
+background:#c0392b;
+color:white;
+border:none;
+padding:8px 14px;
+border-radius:4px;
+cursor:pointer;
+font-size:14px;
+}
+
+.nav-logout:hover{
+background:#a93226;
+}
+
+.navbar ul{
+display:flex;
+align-items:center;
+flex-wrap:wrap;
+gap:10px;
+}
+
+.nav-spacer{
+margin-left:auto;
+}
+
 .table-container table{
 width:100%;
 border-collapse:collapse;
@@ -100,22 +129,11 @@ color:#27ae60;
 font-weight:bold;
 }
 
-.estado-inactivo{
-color:#c0392b;
-font-weight:bold;
+.sin-resultados td{
+text-align:center;
+color:#777;
+padding:20px 0;
 }
-
-.btn-small{
-padding:5px 8px;
-border:none;
-border-radius:4px;
-cursor:pointer;
-font-size:12px;
-}
-
-.btn-edit{background:#2980b9;color:white;}
-.btn-delete{background:#c0392b;color:white;}
-.btn-toggle{background:#7f8c8d;color:white;}
 
 .modal{
 display:none;
@@ -172,6 +190,12 @@ padding:8px;
 <li><a href="movimientos_inventario.html">Movimientos</a></li>
 <li><a href="alertas_stock.html">Alertas</a></li>
 <li><a href="usuarios.html">Usuarios</a></li>
+
+<li class="nav-spacer">
+    <button id="logoutButton" class="nav-logout" type="button">
+        Cerrar sesión
+    </button>
+</li>
 
 </ul>
 
@@ -285,9 +309,9 @@ onkeyup="filtrarUsuarios()"
 
 </select>
 
-<button class="btn-primary" onclick="crearUsuario()">Guardar</button>
+<button class="btn-primary" id="btnGuardarUsuario" onclick="crearUsuario()">Guardar</button>
 
-<button onclick="cerrarModal()">Cancelar</button>
+<button type="button" onclick="cerrarModal()">Cancelar</button>
 
 </div>
 
@@ -296,273 +320,294 @@ onkeyup="filtrarUsuarios()"
 
 <script>
 
-let usuarios = [];
+/* =========================================================
+   ESTADO
+   ========================================================= */
 
+let usuarios = [];
 let roles = [];
 
+
 function abrirModal(){
-document.getElementById("modalUsuario").style.display="flex";
+    document.getElementById("modalUsuario").style.display = "flex";
 }
 
 function cerrarModal(){
-document.getElementById("modalUsuario").style.display="none";
+    document.getElementById("modalUsuario").style.display = "none";
 }
+
+
+/* =========================================================
+   ROLES
+
+   GET /roles no requiere token en el backend, pero se usa
+   apiFetch() de todas formas por consistencia (si en algún
+   momento se protege, seguirá funcionando sin tocar este
+   archivo).
+   ========================================================= */
+
 async function cargarRoles(){
 
-    const respuesta =
-    await fetch(
-        "http://localhost:3000/roles"
-    );
+    try{
 
-    roles =
-    await respuesta.json();
+        const respuesta = await apiFetch("/roles");
+        const data = await getJSON(respuesta);
 
-    const select =
-    document.getElementById("rol");
+        if(!respuesta.ok){
 
-    select.innerHTML =
-    '<option value="">Seleccione un rol</option>';
+            console.error("Error obteniendo roles:", data);
+            return;
 
-    roles.forEach(r=>{
+        }
 
-        select.innerHTML += `
+        roles = data;
 
-        <option value="${r.id_rol}">
+        const select = document.getElementById("rol");
 
-            ${r.nombre_rol}
+        select.innerHTML = '<option value="">Seleccione un rol</option>';
 
-        </option>
+        roles.forEach(r => {
 
-        `;
+            const option = document.createElement("option");
+            option.value = r.id_rol;
+            option.textContent = r.nombre_rol;
+            select.appendChild(option);
 
-    });
+        });
+
+    }catch(error){
+
+        console.error("Error cargando roles:", error);
+
+    }
 
 }
+
+
+/* =========================================================
+   CREAR USUARIO
+
+   Antes usaba fetch() directo, sin el header
+   "Authorization: Bearer <token>". POST /usuarios está
+   protegido con autenticarToken en el backend, así que la
+   petición siempre devolvía 401 y nunca se creaba nada.
+   ========================================================= */
 
 async function crearUsuario(){
 
-    const nombre =
-    document.getElementById("nombre").value;
+    const nombre = document.getElementById("nombre").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const rol = document.getElementById("rol").value;
 
-    const email =
-    document.getElementById("email").value;
-
-    const rol =
-    document.getElementById("rol").value;
-
-    if(
-        nombre=="" ||
-        email=="" ||
-        rol==""
-    ){
+    if(nombre === "" || email === "" || rol === ""){
 
         alert("Complete todos los campos");
-
         return;
 
     }
 
-    const respuesta =
-    await fetch(
+    const btnGuardar = document.getElementById("btnGuardarUsuario");
+    btnGuardar.disabled = true;
+    btnGuardar.textContent = "Guardando...";
 
-        "http://localhost:3000/usuarios",
+    try{
 
-        {
+        const respuesta = await apiFetch(
+            "/usuarios",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    nombre,
+                    correo: email,
+                    rol: Number(rol)
+                    // La contraseña queda opcional: si no se envía,
+                    // el backend asigna "MicroStock123" por defecto
+                    // (server.txt, POST /usuarios).
+                })
+            }
+        );
 
-            method:"POST",
+        const resultado = await getJSON(respuesta);
 
-            headers:{
+        if(!respuesta.ok){
 
-                "Content-Type":"application/json"
-
-            },
-
-            body:JSON.stringify({
-
-                nombre,
-
-                correo:email,
-
-                rol
-
-            })
+            alert(resultado.error || resultado.message || "No se pudo crear el usuario.");
+            return;
 
         }
 
-    );
+        alert(resultado.mensaje || "Usuario creado correctamente.");
 
-    const resultado =
-    await respuesta.json();
+        cerrarModal();
 
-    alert(
+        document.getElementById("nombre").value = "";
+        document.getElementById("email").value = "";
+        document.getElementById("rol").value = "";
 
-        resultado.mensaje ||
+        cargarUsuarios();
 
-        resultado.error
+    }catch(error){
 
-    );
+        console.error("Error creando usuario:", error);
+        alert("Error de conexión con el servidor.");
 
-    cerrarModal();
+    }finally{
 
-    document.getElementById("nombre").value="";
-    document.getElementById("email").value="";
+        btnGuardar.disabled = false;
+        btnGuardar.textContent = "Guardar";
 
-    cargarUsuarios();
+    }
 
 }
+
+
+/* =========================================================
+   LISTAR USUARIOS
+
+   Mismo problema que crearUsuario(): GET /usuarios también
+   está protegido y necesita el token.
+   ========================================================= */
 
 async function cargarUsuarios(){
 
-    const respuesta =
-    await fetch(
-        "http://localhost:3000/usuarios"
-    );
+    try{
 
-    usuarios =
-    await respuesta.json();
+        const respuesta = await apiFetch("/usuarios");
+        const data = await getJSON(respuesta);
 
-    const tabla =
-    document.getElementById("tablaUsuarios");
+        if(!respuesta.ok){
 
-    tabla.innerHTML="";
+            console.error("Error obteniendo usuarios:", data);
+            document.getElementById("tablaUsuarios").innerHTML =
+                `<tr class="sin-resultados"><td colspan="6">
+                    ${escapeHTML(data.error || data.message || "No se pudieron cargar los usuarios.")}
+                </td></tr>`;
+            return;
 
-    let admin=0;
-    let vendedor=0;
-    let inventario=0;
+        }
 
-    usuarios.forEach(u=>{
+        usuarios = data;
 
-        if(u.nombre_rol=="Administrador") admin++;
+        renderUsuarios(usuarios);
 
-        if(u.nombre_rol=="Vendedor") vendedor++;
+    }catch(error){
 
-        if(u.nombre_rol=="Inventario") inventario++;
+        console.error("Error cargando usuarios:", error);
+        document.getElementById("tablaUsuarios").innerHTML =
+            `<tr class="sin-resultados"><td colspan="6">Error de conexión con el servidor.</td></tr>`;
 
-        tabla.innerHTML += `
+    }
 
-        <tr>
+}
 
-        <td>${u.id_usuario}</td>
 
-        <td>${u.nombre_usuario}</td>
+/* =========================================================
+   RENDER
 
-        <td>${u.correo}</td>
+   El backend (GET /usuarios) devuelve exactamente estos
+   campos: id_usuario, nombre_usuario, correo, id_rol,
+   nombre_rol. La versión original usaba u.nombre, u.email,
+   u.rol, u.id, u.estado (que no existen en la respuesta),
+   así que el buscador y los botones de Estado/Eliminar
+   nunca funcionaban sobre datos reales.
 
-        <td>
+   Nota: la tabla Usuario no tiene una columna de estado
+   (activo/inactivo) en el backend actual, y no existen
+   endpoints PUT/DELETE /usuarios/:id. Por eso el estado se
+   muestra fijo como "Activo" y se quitaron los botones
+   "Estado"/"Eliminar": mostrarlos sin un endpoint real solo
+   generaría la misma sensación de "no hace nada" que tenías
+   con crear usuario. Si quieres esa función completa, hay
+   que agregar la columna + los endpoints correspondientes.
+   ========================================================= */
 
-        <span class="badge">
+function renderUsuarios(lista){
 
-        ${u.nombre_rol}
+    const tabla = document.getElementById("tablaUsuarios");
 
-        </span>
+    tabla.innerHTML = "";
 
-        </td>
+    if(lista.length === 0){
 
-        <td class="estado-activo">
+        tabla.innerHTML =
+            `<tr class="sin-resultados"><td colspan="6">No hay usuarios registrados.</td></tr>`;
 
-        Activo
+    }
 
-        </td>
+    let admin = 0;
+    let vendedor = 0;
+    let inventario = 0;
 
-        <td>
+    // Los contadores de rol siempre se calculan sobre el listado
+    // completo (usuarios), no sobre la lista filtrada que llega
+    // por parámetro, para que no cambien al buscar/filtrar.
+    usuarios.forEach(u => {
 
-        -
-
-        </td>
-
-        </tr>
-
-        `;
+        if(u.nombre_rol === "Administrador") admin++;
+        if(u.nombre_rol === "Vendedor") vendedor++;
+        if(u.nombre_rol === "Inventario") inventario++;
 
     });
 
-    document.getElementById("countAdmin").innerText=admin;
+    lista.forEach(u => {
 
-    document.getElementById("countVendedor").innerText=vendedor;
+        const fila = document.createElement("tr");
 
-    document.getElementById("countInventario").innerText=inventario;
+        fila.innerHTML = `
+        <td>${escapeHTML(u.id_usuario)}</td>
+        <td>${escapeHTML(u.nombre_usuario)}</td>
+        <td>${escapeHTML(u.correo)}</td>
+        <td><span class="badge">${escapeHTML(u.nombre_rol)}</span></td>
+        <td class="estado-activo">Activo</td>
+        <td>-</td>
+        `;
 
-    document.getElementById("countActivos").innerText=usuarios.length;
+        tabla.appendChild(fila);
 
-}
+    });
 
-function toggleEstado(id){
-
-usuarios=usuarios.map(u=>{
-if(u.id===id){
-u.estado=u.estado==="Activo"?"Inactivo":"Activo";
-}
-return u;
-});
-
-renderUsuarios();
-
-}
-
-function eliminarUsuario(id){
-
-if(confirm("Eliminar usuario?")){
-
-usuarios=usuarios.filter(u=>u.id!==id);
-
-
-renderUsuarios();
+    document.getElementById("countAdmin").innerText = admin;
+    document.getElementById("countVendedor").innerText = vendedor;
+    document.getElementById("countInventario").innerText = inventario;
+    document.getElementById("countActivos").innerText = usuarios.length;
 
 }
 
-}
+
+/* =========================================================
+   BÚSQUEDA / FILTRO
+   ========================================================= */
 
 function filtrarUsuarios(){
 
-let texto=document.getElementById("buscar").value.toLowerCase();
-let rol=document.getElementById("filtroRol").value;
+    const texto = document.getElementById("buscar").value.toLowerCase();
+    const rol = document.getElementById("filtroRol").value;
 
-let filtrados=usuarios.filter(u=>
+    const filtrados = usuarios.filter(u =>
 
-(u.nombre.toLowerCase().includes(texto) ||
-u.email.toLowerCase().includes(texto)) &&
+        (
+            u.nombre_usuario.toLowerCase().includes(texto) ||
+            u.correo.toLowerCase().includes(texto)
+        ) &&
+        (rol === "" || u.nombre_rol === rol)
 
-(rol==="" || u.rol===rol)
+    );
 
-);
-
-document.getElementById("tablaUsuarios").innerHTML="";
-
-filtrados.forEach(u=>{
-
-document.getElementById("tablaUsuarios").innerHTML+=`
-
-<tr>
-
-<td>${u.id}</td>
-<td>${u.nombre}</td>
-<td>${u.email}</td>
-<td>${u.rol}</td>
-<td>${u.estado}</td>
-
-<td>
-
-<button class="btn-small btn-toggle" onclick="toggleEstado(${u.id})">
-Estado
-</button>
-
-<button class="btn-small btn-delete" onclick="eliminarUsuario(${u.id})">
-Eliminar
-</button>
-
-</td>
-
-</tr>
-
-`;
-
-});
+    renderUsuarios(filtrados);
 
 }
 
-cargarRoles();
 
-cargarUsuarios();
+/* =========================================================
+   INICIO
+   ========================================================= */
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    cargarRoles();
+    cargarUsuarios();
+
+});
 
 </script>
 

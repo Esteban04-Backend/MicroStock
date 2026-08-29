@@ -10,6 +10,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+<!-- Necesario para apiFetch(), getToken() y escapeHTML() -->
+<script src="script.js" defer></script>
+
 <style>
 
 .dashboard-alertas{
@@ -71,6 +74,12 @@ margin-right:4px;
 .btn-revisar{background:#27ae60;color:white;}
 .btn-ignorar{background:#7f8c8d;color:white;}
 .btn-eliminar{background:#c0392b;color:white;}
+
+.sin-resultados td{
+text-align:center;
+color:#777;
+padding:20px 0;
+}
 
 </style>
 
@@ -153,266 +162,258 @@ margin-right:4px;
 <script>
 
 let alertas = [];
+let grafico = null;
+
+
+/* =========================================================
+   CARGAR ALERTAS
+
+   Usa apiFetch() (de script.js) para que viaje el header
+   "Authorization: Bearer <token>". El backend protege
+   GET /alertas con autenticarToken; con fetch() directo
+   la respuesta es 401 y la tabla queda vacía sin aviso.
+   ========================================================= */
+
 async function cargarAlertas(){
 
-    const respuesta =
-    await fetch("http://localhost:3000/alertas");
+    try{
 
-    alertas =
-    await respuesta.json();
+        const respuesta = await apiFetch("/alertas");
+        const data = await getJSON(respuesta);
 
-    let tabla =
-    document.getElementById("tablaAlertas");
+        if(!respuesta.ok){
 
-    tabla.innerHTML="";
+            console.error("Error obteniendo alertas:", data);
+            document.getElementById("tablaAlertas").innerHTML =
+                `<tr class="sin-resultados"><td colspan="6">
+                    ${escapeHTML(data.error || data.message || "No se pudieron cargar las alertas.")}
+                </td></tr>`;
+            return;
 
-    let criticos=0;
-    let bajos=0;
+        }
 
-    alertas.forEach((a,index)=>{
+        alertas = data;
 
-        if(a.prioridad==="Crítico") criticos++;
-        else bajos++;
+        renderAlertas();
 
-        tabla.innerHTML+=`
+    }catch(error){
 
-        <tr>
+        console.error("Error cargando alertas:", error);
+        document.getElementById("tablaAlertas").innerHTML =
+            `<tr class="sin-resultados"><td colspan="6">Error de conexión con el servidor.</td></tr>`;
 
-            <td>${a.nombre_producto}</td>
-
-            <td>${a.stock_actual}</td>
-
-            <td>${a.stock_minimo}</td>
-
-            <td>
-
-                <span class="badge ${
-                    a.prioridad==="Crítico"
-                    ? "critico"
-                    : "bajo"
-                }">
-
-                ${a.prioridad}
-
-                </span>
-
-            </td>
-
-            <td>
-
-                <span class="estado-pendiente">
-
-                Pendiente
-
-                </span>
-
-            </td>
-
-            <td>
-
-                <button
-                class="btn btn-reponer"
-                onclick="reponerStock(${a.id_producto})">
-
-                Reponer
-
-                </button>
-
-                <button
-                class="btn btn-minimo"
-                onclick="editarMinimo(${a.id_producto})">
-
-                Nuevo mínimo
-
-                </button>
-
-            </td>
-
-        </tr>
-
-        `;
-
-    });
-
-    document.getElementById("criticos").innerText=criticos;
-    document.getElementById("bajos").innerText=bajos;
-
-    crearGrafico(criticos,bajos);
+    }
 
 }
+
+
+/* =========================================================
+   RENDER
+
+   El backend (GET /alertas) devuelve exactamente estos
+   campos: id_producto, nombre_producto, stock_actual,
+   stock_minimo, prioridad ("Crítico" | "Bajo"). No hay un
+   campo "estado" (pendiente/revisado/ignorado): esa alerta
+   se calcula al vuelo comparando stock_actual vs
+   stock_minimo, no se guarda en una tabla propia. Por eso
+   se muestra siempre como "Pendiente" y no existen aún los
+   botones Revisado/Ignorar/Eliminar (requerirían una tabla
+   Alerta en la base de datos para persistir ese estado).
+   ========================================================= */
 
 function renderAlertas(){
 
-let tabla=document.getElementById("tablaAlertas");
+    const tabla = document.getElementById("tablaAlertas");
 
-tabla.innerHTML="";
+    tabla.innerHTML = "";
 
-let criticos=0;
-let bajos=0;
+    if(alertas.length === 0){
 
-alertas.forEach((a,index)=>{
+        tabla.innerHTML =
+            `<tr class="sin-resultados"><td colspan="6">No hay alertas de stock activas 🎉</td></tr>`;
 
-if(a.prioridad==="Crítico") criticos++;
-if(a.prioridad==="Bajo") bajos++;
+    }
 
-tabla.innerHTML += `
-<tr>
+    let criticos = 0;
+    let bajos = 0;
 
-<td>${a.producto}</td>
+    alertas.forEach(a => {
 
-<td>${a.stock}</td>
+        if(a.prioridad === "Crítico") criticos++;
+        else bajos++;
 
-<td>${a.minimo}</td>
+        const fila = document.createElement("tr");
 
-<td>
-<span class="badge ${a.prioridad==="Crítico"?"critico":"bajo"}">
-${a.prioridad}
-</span>
-</td>
+        fila.innerHTML = `
+        <td>${escapeHTML(a.nombre_producto)}</td>
+        <td>${escapeHTML(a.stock_actual)}</td>
+        <td>${escapeHTML(a.stock_minimo)}</td>
+        <td>
+            <span class="badge ${a.prioridad === "Crítico" ? "critico" : "bajo"}">
+                ${escapeHTML(a.prioridad)}
+            </span>
+        </td>
+        <td class="estado-pendiente">Pendiente</td>
+        <td>
+            <button class="btn btn-reponer" data-id="${a.id_producto}">Reponer</button>
+            <button class="btn btn-minimo" data-id="${a.id_producto}">Nuevo mínimo</button>
+        </td>
+        `;
 
-<td class="estado-${a.estado.toLowerCase()}">
-${a.estado}
-</td>
+        tabla.appendChild(fila);
 
-<td>
+    });
 
-<button class="btn btn-reponer"
-onclick="reponerStock(${a.id_producto})"
-Reponer
-</button>
+    tabla.querySelectorAll(".btn-reponer").forEach(btn => {
 
-<button class="btn btn-minimo"
-onclick="editarMinimo(${a.id_producto})"
-Nuevo mínimo
-</button>
+        btn.addEventListener("click", () => reponerStock(Number(btn.dataset.id)));
 
-<button class="btn btn-revisar"
-onclick="marcarRevisado(${index})">
-Revisado
-</button>
+    });
 
-<button class="btn btn-ignorar"
-onclick="ignorarAlerta(${index})">
-Ignorar
-</button>
+    tabla.querySelectorAll(".btn-minimo").forEach(btn => {
 
-<button class="btn btn-eliminar"
-onclick="eliminarAlerta(${index})">
-Eliminar
-</button>
+        btn.addEventListener("click", () => editarMinimo(Number(btn.dataset.id)));
 
-</td>
+    });
 
-</tr>
-`;
+    document.getElementById("criticos").innerText = criticos;
+    document.getElementById("bajos").innerText = bajos;
 
-});
-
-document.getElementById("criticos").innerText = criticos;
-document.getElementById("bajos").innerText = bajos;
-
-crearGrafico(criticos,bajos);
+    crearGrafico(criticos, bajos);
 
 }
 
-function crearGrafico(criticos,bajos){
 
-new Chart(document.getElementById("graficoAlertas"),{
+function crearGrafico(criticos, bajos){
 
-type:"doughnut",
+    // Si ya existe una instancia previa del gráfico, se destruye
+    // antes de crear otra; si no, Chart.js apila instancias sobre
+    // el mismo <canvas> en cada recarga.
+    if(grafico){
 
-data:{
-labels:["Críticos","Stock Bajo"],
-datasets:[{data:[criticos,bajos]}]
+        grafico.destroy();
+
+    }
+
+    grafico = new Chart(
+        document.getElementById("graficoAlertas"),
+        {
+            type: "doughnut",
+            data: {
+                labels: ["Críticos", "Stock Bajo"],
+                datasets: [{ data: [criticos, bajos] }]
+            }
+        }
+    );
+
 }
 
-});
 
-}
+/* =========================================================
+   REPONER STOCK
+   ========================================================= */
 
 async function reponerStock(id){
 
-    let cantidad =
-    prompt("Cantidad a agregar:");
+    const cantidadTexto = prompt("Cantidad a agregar:");
 
-    if(cantidad===null) return;
+    if(cantidadTexto === null) return;
 
-    cantidad=Number(cantidad);
+    const cantidad = Number(cantidadTexto);
 
-    if(cantidad<=0){
+    if(!Number.isInteger(cantidad) || cantidad <= 0){
 
         alert("Cantidad inválida");
-
         return;
 
     }
 
-    const respuesta =
-    await fetch(
+    try{
 
-        "http://localhost:3000/productos/"+id+"/reponer",
+        const respuesta = await apiFetch(
+            `/productos/${id}/reponer`,
+            {
+                method: "PUT",
+                body: JSON.stringify({ cantidad })
+            }
+        );
 
-        {
+        const data = await getJSON(respuesta);
 
-            method:"PUT",
+        if(!respuesta.ok){
 
-            headers:{
-                "Content-Type":"application/json"
-            },
-
-            body:JSON.stringify({
-
-                cantidad
-
-            })
+            alert(data.error || data.message || "No se pudo reponer el stock.");
+            return;
 
         }
 
-    );
+        alert(data.mensaje || "Stock actualizado correctamente.");
 
-    const data =
-    await respuesta.json();
+        cargarAlertas();
 
-    alert(data.mensaje);
+    }catch(error){
 
-    cargarAlertas();
+        console.error("Error reponiendo stock:", error);
+        alert("Error de conexión con el servidor.");
+
+    }
 
 }
+
+
+/* =========================================================
+   EDITAR STOCK MÍNIMO
+   ========================================================= */
 
 async function editarMinimo(id){
 
-    let nuevo = prompt("Nuevo stock mínimo:");
+    const nuevoTexto = prompt("Nuevo stock mínimo:");
 
-    if(nuevo===null) return;
+    if(nuevoTexto === null) return;
 
-    await fetch(
+    const nuevo = Number(nuevoTexto);
 
-        "http://localhost:3000/productos/minimo/"+id,
+    if(!Number.isInteger(nuevo) || nuevo < 0){
 
-        {
+        alert("Valor inválido");
+        return;
 
-            method:"PUT",
+    }
 
-            headers:{
-                "Content-Type":"application/json"
-            },
+    try{
 
-            body:JSON.stringify({
+        const respuesta = await apiFetch(
+            `/productos/minimo/${id}`,
+            {
+                method: "PUT",
+                body: JSON.stringify({ minimo: nuevo })
+            }
+        );
 
-                minimo:Number(nuevo)
+        const data = await getJSON(respuesta);
 
-            })
+        if(!respuesta.ok){
+
+            alert(data.error || data.message || "No se pudo actualizar el mínimo.");
+            return;
 
         }
 
-    );
+        alert(data.mensaje || "Stock mínimo actualizado.");
 
-    cargarAlertas();
-    
+        cargarAlertas();
+
+    }catch(error){
+
+        console.error("Error actualizando mínimo:", error);
+        alert("Error de conexión con el servidor.");
+
+    }
 
 }
 
-cargarAlertas();
+
+document.addEventListener("DOMContentLoaded", cargarAlertas);
 
 </script>
 

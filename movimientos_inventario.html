@@ -10,6 +10,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+<!-- Necesario para apiFetch(), getToken() y escapeHTML() -->
+<script src="script.js" defer></script>
+
 <style>
 
 .stats-grid{
@@ -70,6 +73,12 @@ font-size:12px;
 .salida{background:#e74c3c;}
 .ajuste{background:#f39c12;}
 
+.sin-resultados td{
+text-align:center;
+color:#777;
+padding:20px 0;
+}
+
 </style>
 
 </head>
@@ -107,17 +116,17 @@ font-size:12px;
 
 <div class="stat-card">
 <h3>Total movimientos</h3>
-<span id="totalMov"></span>
+<span id="totalMov">0</span>
 </div>
 
 <div class="stat-card">
 <h3>Entradas</h3>
-<span id="totalEntradas"></span>
+<span id="totalEntradas">0</span>
 </div>
 
 <div class="stat-card">
 <h3>Salidas</h3>
-<span id="totalSalidas"></span>
+<span id="totalSalidas">0</span>
 </div>
 
 </div>
@@ -130,9 +139,9 @@ font-size:12px;
 
 <select id="filtroTipo" onchange="filtrarMovimientos()">
 <option value="">Todos</option>
-<option value="Entrada">Entrada</option>
-<option value="Salida">Salida</option>
-<option value="Ajuste">Ajuste</option>
+<option value="entrada">Entrada</option>
+<option value="salida">Salida</option>
+<option value="ajuste">Ajuste</option>
 </select>
 
 <input
@@ -154,7 +163,7 @@ onkeyup="filtrarMovimientos()"
 <th>Producto</th>
 <th>Tipo</th>
 <th>Cantidad</th>
-<th>Usuario</th>
+<th>Referencia</th>
 </tr>
 </thead>
 
@@ -169,109 +178,141 @@ onkeyup="filtrarMovimientos()"
 <script>
 
 let movimientos = [];
+let grafico = null;
+
 async function cargarMovimientos(){
 
-    const respuesta =
-    await fetch("http://localhost:3000/movimientos");
+    try{
 
-    movimientos =
-    await respuesta.json();
+        // apiFetch() agrega el header "Authorization: Bearer <token>"
+        // que exige /movimientos en el backend. Con fetch() directo
+        // la respuesta es 401 y la tabla/gráfico quedan vacíos.
+        const respuesta = await apiFetch("/movimientos");
+        const data = await getJSON(respuesta);
 
-    renderMovimientos();
+        if(!respuesta.ok){
 
-}
+            console.error("Error obteniendo movimientos:", data);
+            document.getElementById("tablaMov").innerHTML =
+                `<tr class="sin-resultados"><td colspan="5">
+                    ${escapeHTML(data.error || data.message || "No se pudieron cargar los movimientos.")}
+                </td></tr>`;
+            return;
 
-function renderMovimientos(lista=movimientos){
+        }
 
-let tabla=document.getElementById("tablaMov");
-tabla.innerHTML="";
+        movimientos = data;
 
-let entradas=0;
-let salidas=0;
+        renderMovimientos();
 
-lista.forEach(m=>{
+    }catch(error){
 
-if(m.tipo_movimiento==="entrada")
-    entradas+=m.cantidad;
+        console.error("Error cargando movimientos:", error);
+        document.getElementById("tablaMov").innerHTML =
+            `<tr class="sin-resultados"><td colspan="5">Error de conexión con el servidor.</td></tr>`;
 
-if(m.tipo_movimiento==="salida")
-    salidas+=m.cantidad;
-
-tabla.innerHTML += `
-
-<tr>
-
-<td>${new Date(m.fecha_movimiento).toLocaleString()}</td>
-
-<td>${m.nombre_producto}</td>
-
-<td>
-
-<span class="badge ${m.tipo_movimiento}">
-
-${m.tipo_movimiento.charAt(0).toUpperCase() + m.tipo_movimiento.slice(1)}
-
-</span>
-
-</td>
-
-<td>${m.cantidad}</td>
-
-<td>${m.referencia_tipo}</td>
-
-</tr>
-
-`;
-
-});
-
-document.getElementById("totalMov").innerText=lista.length;
-document.getElementById("totalEntradas").innerText=entradas;
-document.getElementById("totalSalidas").innerText=salidas;
-
-crearGrafico(entradas,salidas);
+    }
 
 }
 
-function crearGrafico(entradas,salidas){
 
-new Chart(document.getElementById("graficoMovimientos"),{
-type:"bar",
-data:{
-labels:["Entradas","Salidas"],
-datasets:[{data:[entradas,salidas]}]
-}
-});
+function renderMovimientos(lista = movimientos){
+
+    const tabla = document.getElementById("tablaMov");
+    tabla.innerHTML = "";
+
+    if(lista.length === 0){
+
+        tabla.innerHTML =
+            `<tr class="sin-resultados"><td colspan="5">No hay movimientos registrados.</td></tr>`;
+
+    }
+
+    let entradas = 0;
+    let salidas = 0;
+
+    lista.forEach(m => {
+
+        // El backend guarda el tipo en minúsculas ("entrada"/"salida"/"ajuste"),
+        // por eso se compara en minúsculas.
+        const tipo = (m.tipo_movimiento || "").toLowerCase();
+
+        if(tipo === "entrada") entradas += Number(m.cantidad);
+        if(tipo === "salida") salidas += Number(m.cantidad);
+
+        const fila = document.createElement("tr");
+
+        fila.innerHTML = `
+            <td>${new Date(m.fecha_movimiento).toLocaleString()}</td>
+            <td>${escapeHTML(m.nombre_producto)}</td>
+            <td>
+                <span class="badge ${tipo}">
+                    ${tipo.charAt(0).toUpperCase() + tipo.slice(1)}
+                </span>
+            </td>
+            <td>${escapeHTML(m.cantidad)}</td>
+            <td>${escapeHTML(m.referencia_tipo)}</td>
+        `;
+
+        tabla.appendChild(fila);
+
+    });
+
+    document.getElementById("totalMov").innerText = lista.length;
+    document.getElementById("totalEntradas").innerText = entradas;
+    document.getElementById("totalSalidas").innerText = salidas;
+
+    crearGrafico(entradas, salidas);
 
 }
+
+
+function crearGrafico(entradas, salidas){
+
+    // Si ya existe un gráfico previo, se destruye antes de crear otro;
+    // si no, Chart.js va apilando instancias sobre el mismo <canvas>
+    // en cada filtro/recarga y el gráfico se ve mal o deja de responder.
+    if(grafico){
+
+        grafico.destroy();
+
+    }
+
+    grafico = new Chart(
+        document.getElementById("graficoMovimientos"),
+        {
+            type: "bar",
+            data: {
+                labels: ["Entradas", "Salidas"],
+                datasets: [{
+                    label: "Unidades",
+                    data: [entradas, salidas]
+                }]
+            }
+        }
+    );
+
+}
+
 
 function filtrarMovimientos(){
 
-let texto=document.getElementById("buscarMov").value.toLowerCase();
-let tipo=document.getElementById("filtroTipo").value;
+    const texto = document.getElementById("buscarMov").value.toLowerCase();
+    const tipo = document.getElementById("filtroTipo").value;
 
-let filtrados = movimientos.filter(m =>
+    const filtrados = movimientos.filter(m =>
 
-    m.nombre_producto.toLowerCase().includes(texto) &&
+        m.nombre_producto.toLowerCase().includes(texto) &&
+        (tipo === "" || (m.tipo_movimiento || "").toLowerCase() === tipo.toLowerCase())
 
-    (
+    );
 
-        tipo === "" ||
-
-        m.tipo_movimiento === tipo.toLowerCase()
-
-    )
-
-);
-
-renderMovimientos(filtrados);
+    renderMovimientos(filtrados);
 
 }
-window.onload = () => {
 
-    cargarMovimientos();
 
-};
+document.addEventListener("DOMContentLoaded", cargarMovimientos);
 
 </script>
 

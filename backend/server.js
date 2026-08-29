@@ -1564,10 +1564,12 @@ app.post(
 
     async (req, res) => {
 
-        const connection =
-            await db.getConnection();
+        let connection;
 
         try {
+
+            connection =
+                await db.getConnection();
 
             const {
                 cliente,
@@ -1855,26 +1857,42 @@ app.post(
 
         } catch (error) {
 
-            await connection.rollback();
+            if (connection) {
+
+                await connection.rollback();
+
+            }
 
             console.error(
                 "Error registrando venta:",
                 error
             );
 
-            res.status(400).json({
+            const esErrorDeConexion = !connection;
+
+            res.status(
+                esErrorDeConexion ? 500 : 400
+            ).json({
 
                 success: false,
 
                 error:
-                    error.message ||
-                    "Error registrando la venta."
+                    esErrorDeConexion
+                        ? "No fue posible conectar con la base de datos. Intente de nuevo."
+                        : (
+                            error.message ||
+                            "Error registrando la venta."
+                        )
 
             });
 
         } finally {
 
-            connection.release();
+            if (connection) {
+
+                connection.release();
+
+            }
 
         }
 
@@ -2002,10 +2020,12 @@ app.post(
 
     async (req, res) => {
 
-        const connection =
-            await db.getConnection();
+        let connection;
 
         try {
+
+            connection =
+                await db.getConnection();
 
             const {
                 proveedor,
@@ -2309,26 +2329,42 @@ app.post(
 
         } catch (error) {
 
-            await connection.rollback();
+            if (connection) {
+
+                await connection.rollback();
+
+            }
 
             console.error(
                 "Error registrando compra:",
                 error
             );
 
-            res.status(400).json({
+            const esErrorDeConexion = !connection;
+
+            res.status(
+                esErrorDeConexion ? 500 : 400
+            ).json({
 
                 success: false,
 
                 error:
-                    error.message ||
-                    "Error registrando compra."
+                    esErrorDeConexion
+                        ? "No fue posible conectar con la base de datos. Intente de nuevo."
+                        : (
+                            error.message ||
+                            "Error registrando compra."
+                        )
 
             });
 
         } finally {
 
-            connection.release();
+            if (connection) {
+
+                connection.release();
+
+            }
 
         }
 
@@ -2842,10 +2878,12 @@ app.put(
 
     async (req, res) => {
 
-        const connection =
-            await db.getConnection();
+        let connection;
 
         try {
+
+            connection =
+                await db.getConnection();
 
             const id =
                 Number(
@@ -2957,26 +2995,42 @@ app.put(
 
         } catch (error) {
 
-            await connection.rollback();
+            if (connection) {
+
+                await connection.rollback();
+
+            }
 
             console.error(
                 "Error reponiendo stock:",
                 error
             );
 
-            res.status(400).json({
+            const esErrorDeConexion = !connection;
+
+            res.status(
+                esErrorDeConexion ? 500 : 400
+            ).json({
 
                 success: false,
 
                 error:
-                    error.message ||
-                    "Error actualizando stock."
+                    esErrorDeConexion
+                        ? "No fue posible conectar con la base de datos. Intente de nuevo."
+                        : (
+                            error.message ||
+                            "Error actualizando stock."
+                        )
 
             });
 
         } finally {
 
-            connection.release();
+            if (connection) {
+
+                connection.release();
+
+            }
 
         }
 
