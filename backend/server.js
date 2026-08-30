@@ -1773,10 +1773,11 @@ app.post(
                 /* -----------------------------------------
                    INSERTAR DETALLE
 
-                   El trigger:
-                   trg_reducir_stock
-
-                   actualiza el stock automáticamente.
+                   IMPORTANTE: el stock ya NO se descuenta por
+                   un trigger de base de datos (trg_reducir_stock).
+                   Ese trigger no existe en el esquema actual, así
+                   que el descuento se hace aquí mismo, de forma
+                   explícita, dentro de la misma transacción.
                 ----------------------------------------- */
 
                 await connection.execute(
@@ -1799,6 +1800,31 @@ app.post(
                         cantidad,
                         precio,
                         subtotal
+                    ]
+
+                );
+
+
+                /* -----------------------------------------
+                   DESCONTAR STOCK
+
+                   La fila del producto ya quedó bloqueada con
+                   "FOR UPDATE" al consultarla más arriba, así
+                   que este UPDATE es seguro ante ventas
+                   concurrentes del mismo producto.
+                ----------------------------------------- */
+
+                await connection.execute(
+
+                    `
+                    UPDATE Producto
+                    SET stock_actual = stock_actual - ?
+                    WHERE id_producto = ?
+                    `,
+
+                    [
+                        cantidad,
+                        idProducto
                     ]
 
                 );
@@ -2241,10 +2267,11 @@ app.post(
                 /* -----------------------------------------
                    INSERTAR DETALLE
 
-                   El trigger:
-                   trg_aumentar_stock
-
-                   aumenta el stock automáticamente.
+                   IMPORTANTE: el stock ya NO se aumenta por
+                   un trigger de base de datos (trg_aumentar_stock).
+                   Ese trigger no existe en el esquema actual, así
+                   que el aumento se hace aquí mismo, de forma
+                   explícita, dentro de la misma transacción.
                 ----------------------------------------- */
 
                 await connection.execute(
@@ -2269,6 +2296,31 @@ app.post(
                         precio,
                         subtotal,
                         subtotal
+                    ]
+
+                );
+
+
+                /* -----------------------------------------
+                   AUMENTAR STOCK
+
+                   La fila del producto ya quedó bloqueada con
+                   "FOR UPDATE" al consultarla más arriba, así
+                   que este UPDATE es seguro ante compras
+                   concurrentes del mismo producto.
+                ----------------------------------------- */
+
+                await connection.execute(
+
+                    `
+                    UPDATE Producto
+                    SET stock_actual = stock_actual + ?
+                    WHERE id_producto = ?
+                    `,
+
+                    [
+                        cantidad,
+                        idProducto
                     ]
 
                 );

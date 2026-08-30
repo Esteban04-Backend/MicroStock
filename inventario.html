@@ -137,6 +137,12 @@ padding:20px 0;
 
 <div class="inventario-container">
 
+<!-- Aviso visible de error. Antes, si algo fallaba (token vencido,
+     script.js no cargó, el servidor no responde, etc.) el único
+     rastro quedaba en la consola del navegador y la página se veía
+     "vacía" sin explicación. Ahora cualquier fallo se muestra aquí. -->
+<div id="avisoError" style="display:none;background:#ffebee;border:1px solid #e57373;color:#c62828;padding:14px 16px;border-radius:8px;margin-bottom:16px;font-size:14px;"></div>
+
 
 <!-- MÉTRICAS -->
 
@@ -170,7 +176,15 @@ padding:20px 0;
 
 <div class="panel">
 
-<h2>Inventario actual</h2>
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <h2 style="margin:0;">Inventario actual</h2>
+    <button type="button" id="btnActualizarInventario" style="padding:8px 14px;border:none;border-radius:6px;background:#1976d2;color:white;cursor:pointer;">
+        ⟳ Actualizar
+    </button>
+</div>
+
+<p id="ultimaActualizacionInv" style="text-align:right;color:#777;font-size:12px;margin:4px 0 12px;"></p>
+
 <!-- Campo de búsqueda dinámica de productos -->
 <input type="text" id="buscarProducto" placeholder="Buscar producto..." onkeyup="buscarProducto()">
 <!-- Tabla que muestra el estado actual del inventario -->
@@ -203,8 +217,53 @@ padding:20px 0;
 // Arreglo global que almacena los productos obtenidos desde MySQL
 let productos = [];
 
+
+function mostrarError(mensaje){
+
+    const aviso = document.getElementById("avisoError");
+    aviso.textContent = mensaje;
+    aviso.style.display = "block";
+
+}
+
+
+function ocultarError(){
+
+    document.getElementById("avisoError").style.display = "none";
+
+}
+
+
 // Consulta los productos registrados y construye el inventario dinámicamente
-async function cargarInventario(){
+//
+// IMPORTANTE: se llama "cargarInventarioPagina" (no "cargarInventario")
+// a propósito. script.js ya tiene su propia función global llamada
+// "cargarInventario()" (para una estructura de tabla distinta, con
+// <table id="tablaInventario"><tbody>...) y, como script.js se carga
+// con "defer", se ejecuta DESPUÉS de este bloque y sobrescribe
+// cualquier función que comparta el mismo nombre. Ese choque de
+// nombres era la causa real de que la tabla se quedara en blanco.
+async function cargarInventarioPagina(){
+
+    ocultarError();
+
+    // Si script.js no se cargó (ruta incorrecta, bloqueado, etc.)
+    // estas funciones no existen. Sin esta verificación, la página
+    // se queda "en blanco" sin ninguna pista de qué pasó.
+    if(typeof apiFetch !== "function"){
+
+        mostrarError(
+            "No se pudo cargar script.js (apiFetch no está disponible). " +
+            "Verifica que el archivo script.js exista en la misma carpeta " +
+            "que inventario.html y que la ruta en <script src=\"script.js\"> sea correcta."
+        );
+
+        document.getElementById("tablaInventario").innerHTML =
+            `<tr class="sin-resultados"><td colspan="5">No se pudo verificar la sesión.</td></tr>`;
+
+        return;
+
+    }
 
     try{
 
@@ -217,10 +276,31 @@ async function cargarInventario(){
         if(!respuesta.ok){
 
             console.error("Error obteniendo productos:", data);
+
+            const mensaje =
+                (data && (data.error || data.message)) ||
+                `El servidor respondió con error ${respuesta.status}.`;
+
+            mostrarError(mensaje);
+
             document.getElementById("tablaInventario").innerHTML =
-                `<tr class="sin-resultados"><td colspan="5">
-                    ${escapeHTML(data.error || data.message || "No se pudo cargar el inventario.")}
-                </td></tr>`;
+                `<tr class="sin-resultados"><td colspan="5">${escapeHTML(mensaje)}</td></tr>`;
+
+            return;
+
+        }
+
+        if(!Array.isArray(data)){
+
+            // GET /productos siempre debería devolver un arreglo.
+            // Si llega otra cosa (por ejemplo un objeto de error
+            // que igual vino con status 200), se avisa en vez de
+            // tronar en silencio al intentar usar .forEach().
+            mostrarError("El servidor no devolvió una lista de productos válida.");
+
+            document.getElementById("tablaInventario").innerHTML =
+                `<tr class="sin-resultados"><td colspan="5">Respuesta inesperada del servidor.</td></tr>`;
+
             return;
 
         }
@@ -232,6 +312,13 @@ async function cargarInventario(){
     }catch(error){
 
         console.error("Error cargando inventario:", error);
+
+        mostrarError(
+            "Error de conexión con el servidor. Verifica que server.js " +
+            "esté corriendo y que la URL de la API (API_URL en script.js) " +
+            "sea correcta. Detalle técnico: " + error.message
+        );
+
         document.getElementById("tablaInventario").innerHTML =
             `<tr class="sin-resultados"><td colspan="5">Error de conexión con el servidor.</td></tr>`;
 
@@ -325,8 +412,56 @@ function buscarProducto(){
 }
 
 
+function marcarUltimaActualizacion(){
+
+    const ahora = new Date();
+
+    document.getElementById("ultimaActualizacionInv").innerText =
+        "Actualizado a las " + ahora.toLocaleTimeString();
+
+}
+
+
+async function actualizarInventarioManual(){
+
+    const boton = document.getElementById("btnActualizarInventario");
+
+    boton.disabled = true;
+    boton.textContent = "Actualizando...";
+
+    await cargarInventarioPagina();
+
+    marcarUltimaActualizacion();
+
+    boton.disabled = false;
+    boton.textContent = "⟳ Actualizar";
+
+}
+
+
 // Inicializa la carga de inventario al abrir la página
-document.addEventListener("DOMContentLoaded", cargarInventario);
+document.addEventListener("DOMContentLoaded", () => {
+
+    cargarInventarioPagina().then(marcarUltimaActualizacion);
+
+    document.getElementById("btnActualizarInventario")
+        .addEventListener("click", actualizarInventarioManual);
+
+});
+
+
+// Si el usuario deja esta pestaña abierta, registra una venta o
+// compra en otra pestaña, y vuelve a esta, se refresca sola en
+// vez de seguir mostrando los números viejos.
+document.addEventListener("visibilitychange", () => {
+
+    if(document.visibilityState === "visible"){
+
+        cargarInventarioPagina().then(marcarUltimaActualizacion);
+
+    }
+
+});
 
 </script>
 
