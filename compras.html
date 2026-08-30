@@ -188,7 +188,7 @@ padding:15px 0;
 
 <input type="number" id="precioCompra" min="0" step="0.01">
 
-<button onclick="agregarProductoCompra()">
+<button onclick="agregarProductoAlCarrito()">
 
 Agregar a compra
 
@@ -405,7 +405,15 @@ function renderizarGridProductos(lista){
    CARRITO DE COMPRA
    ========================================================= */
 
-function agregarProductoCompra(){
+// IMPORTANTE: se llama "agregarProductoAlCarrito" (no
+// "agregarProductoCompra") a propósito. script.js ya tiene su
+// propia función global llamada "agregarProductoCompra()" (pensada
+// para otra estructura de página, ligada a "inicializarCompras()")
+// y, como script.js se carga con "defer", se ejecuta DESPUÉS de
+// este bloque y sobrescribe cualquier función que comparta el
+// mismo nombre. Ese choque de nombres era la causa real de que
+// "Agregar a compra" no hiciera nada.
+function agregarProductoAlCarrito(){
 
     const index = document.getElementById("productoCompra").value;
     const cantidad = parseInt(document.getElementById("cantidadCompra").value, 10);
