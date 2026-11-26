@@ -69,14 +69,56 @@ color:white;
 font-size:12px;
 }
 
-.entrada{background:#27ae60;}
-.salida{background:#e74c3c;}
+.entrada{background:#16A34A;}
+.salida{background:#2563EB;}
 .ajuste{background:#f39c12;}
 
 .sin-resultados td{
 text-align:center;
 color:#777;
 padding:20px 0;
+}
+
+/* CAMBIO 1: filtro de fechas */
+.filters{
+align-items:flex-end;
+}
+
+.filtro-campo{
+display:flex;
+flex-direction:column;
+gap:4px;
+}
+
+.filtro-campo label{
+font-size:13px;
+font-weight:600;
+color:var(--text-light);
+}
+
+.btn-limpiar{
+background:#6b7280;
+}
+
+.btn-limpiar:hover{
+background:#4b5563;
+}
+
+.error-fechas{
+color:var(--danger);
+background:var(--danger-light);
+border:1px solid #f5c2c7;
+padding:10px 12px;
+border-radius:6px;
+margin:0 0 15px;
+font-size:14px;
+font-weight:600;
+}
+
+.rango-actual{
+color:var(--text-light);
+font-size:13px;
+margin:0 0 15px;
 }
 
 </style>
@@ -137,7 +179,22 @@ padding:20px 0;
 
 <div class="filters">
 
-<select id="filtroTipo" onchange="filtrarMovimientos()">
+<!-- CAMBIO 1: rango de fechas (se consulta en el backend) -->
+<div class="filtro-campo">
+<label for="fechaInicio">Fecha inicio</label>
+<input type="date" id="fechaInicio">
+</div>
+
+<div class="filtro-campo">
+<label for="fechaFin">Fecha fin</label>
+<input type="date" id="fechaFin">
+</div>
+
+<button type="button" id="btnFiltrarFechas" onclick="aplicarFiltroFechas()">Filtrar</button>
+<button type="button" id="btnLimpiarFiltros" class="btn-limpiar" onclick="limpiarFiltros()">Limpiar filtros</button>
+
+<!-- Filtros locales que ya existían (se mantienen igual) -->
+<select id="filtroTipo" aria-label="Filtrar por tipo de movimiento" onchange="filtrarMovimientos()">
 <option value="">Todos</option>
 <option value="entrada">Entrada</option>
 <option value="salida">Salida</option>
@@ -147,11 +204,16 @@ padding:20px 0;
 <input
 type="text"
 placeholder="Buscar producto"
+aria-label="Buscar producto"
 id="buscarMov"
 onkeyup="filtrarMovimientos()"
 >
 
 </div>
+
+<!-- CAMBIO 1: mensaje de error de fechas y resumen del rango aplicado -->
+<p id="errorFechas" class="error-fechas" role="alert" hidden></p>
+<p id="rangoActual" class="rango-actual"></p>
 
 <div class="table-container">
 
@@ -180,19 +242,100 @@ onkeyup="filtrarMovimientos()"
 let movimientos = [];
 let grafico = null;
 
-async function cargarMovimientos(){
+// CAMBIO 1: contador de peticiones. Si el usuario pulsa "Filtrar" varias
+// veces seguidas, solo se pinta la respuesta de la última petición.
+let solicitudActual = 0;
+
+
+// CAMBIO 1: aviso de error del rango de fechas
+function mostrarErrorFechas(mensaje){
+
+    const aviso = document.getElementById("errorFechas");
+
+    aviso.textContent = mensaje;
+    aviso.hidden = false;
+
+}
+
+
+function ocultarErrorFechas(){
+
+    const aviso = document.getElementById("errorFechas");
+
+    aviso.textContent = "";
+    aviso.hidden = true;
+
+}
+
+
+// CAMBIO 1: texto que indica qué rango se está mostrando
+function describirRango(fechaInicio, fechaFin){
+
+    const aviso = document.getElementById("rangoActual");
+
+    if(!fechaInicio && !fechaFin){
+
+        aviso.textContent = "Mostrando todos los movimientos registrados.";
+        return;
+
+    }
+
+    // YYYY-MM-DD -> DD/MM/YYYY
+    const formatear = fecha => fecha.split("-").reverse().join("/");
+
+    const desde = fechaInicio
+        ? formatear(fechaInicio)
+        : "el primer movimiento registrado";
+
+    const hasta = fechaFin
+        ? formatear(fechaFin)
+        : "hoy";
+
+    aviso.textContent = `Mostrando movimientos desde ${desde} hasta ${hasta}.`;
+
+}
+
+
+// CAMBIO 1: ahora recibe las fechas (opcionales) y las envía al backend
+// como query params. Sin fechas, trae todo el historial (comportamiento anterior).
+async function cargarMovimientos(fechaInicio = "", fechaFin = ""){
+
+    const idSolicitud = ++solicitudActual;
+
+    const parametros = new URLSearchParams();
+
+    if(fechaInicio) parametros.set("fechaInicio", fechaInicio);
+    if(fechaFin) parametros.set("fechaFin", fechaFin);
+
+    const consulta = parametros.toString();
+
+    const endpoint = consulta
+        ? `/movimientos?${consulta}`
+        : "/movimientos";
 
     try{
 
         // apiFetch() agrega el header "Authorization: Bearer <token>"
         // que exige /movimientos en el backend. Con fetch() directo
         // la respuesta es 401 y la tabla/gráfico quedan vacíos.
-        const respuesta = await apiFetch("/movimientos");
+        const respuesta = await apiFetch(endpoint);
         const data = await getJSON(respuesta);
+
+        // Llegó una petición más reciente: se descarta esta respuesta.
+        if(idSolicitud !== solicitudActual) return;
 
         if(!respuesta.ok){
 
             console.error("Error obteniendo movimientos:", data);
+
+            // CAMBIO 1: se limpian datos, totales y gráfico para que no
+            // queden valores de una consulta anterior junto al error.
+            movimientos = [];
+            document.getElementById("totalMov").innerText = 0;
+            document.getElementById("totalEntradas").innerText = 0;
+            document.getElementById("totalSalidas").innerText = 0;
+            crearGrafico(0, 0);
+
             document.getElementById("tablaMov").innerHTML =
                 `<tr class="sin-resultados"><td colspan="5">
                     ${escapeHTML(data.error || data.message || "No se pudieron cargar los movimientos.")}
@@ -203,15 +346,76 @@ async function cargarMovimientos(){
 
         movimientos = data;
 
-        renderMovimientos();
+        describirRango(fechaInicio, fechaFin);
+
+        // CAMBIO 1: se reaplican los filtros locales (tipo y producto)
+        // sobre los datos nuevos; así lista, totales y gráfico quedan
+        // coherentes con TODOS los filtros activos.
+        filtrarMovimientos();
 
     }catch(error){
+
+        if(idSolicitud !== solicitudActual) return;
 
         console.error("Error cargando movimientos:", error);
         document.getElementById("tablaMov").innerHTML =
             `<tr class="sin-resultados"><td colspan="5">Error de conexión con el servidor.</td></tr>`;
 
     }
+
+}
+
+
+// CAMBIO 1: botón "Filtrar"
+async function aplicarFiltroFechas(){
+
+    const fechaInicio = document.getElementById("fechaInicio").value;
+    const fechaFin = document.getElementById("fechaFin").value;
+
+    ocultarErrorFechas();
+
+    // Regla: fecha inicio <= fecha fin (formato YYYY-MM-DD comparable como texto)
+    if(fechaInicio && fechaFin && fechaInicio > fechaFin){
+
+        mostrarErrorFechas(
+            "La fecha de inicio no puede ser posterior a la fecha fin. Corrija el rango e intente de nuevo."
+        );
+
+        return;
+
+    }
+
+    const boton = document.getElementById("btnFiltrarFechas");
+
+    boton.disabled = true;
+    boton.textContent = "Filtrando...";
+
+    try{
+
+        await cargarMovimientos(fechaInicio, fechaFin);
+
+    }finally{
+
+        boton.disabled = false;
+        boton.textContent = "Filtrar";
+
+    }
+
+}
+
+
+// CAMBIO 1: botón "Limpiar filtros" -> vuelve al comportamiento por defecto
+// (desde el primer movimiento hasta hoy, sin filtro de tipo ni de producto).
+function limpiarFiltros(){
+
+    document.getElementById("fechaInicio").value = "";
+    document.getElementById("fechaFin").value = "";
+    document.getElementById("filtroTipo").value = "";
+    document.getElementById("buscarMov").value = "";
+
+    ocultarErrorFechas();
+
+    cargarMovimientos();
 
 }
 
@@ -267,7 +471,43 @@ function renderMovimientos(lista = movimientos){
 }
 
 
+// CAMBIO 2: colores fijos de cada serie (se ven igual en tema claro u oscuro)
+const COLOR_ENTRADAS = "#16A34A"; // verde
+const COLOR_SALIDAS = "#2563EB";  // azul
+
+// CAMBIO 2: últimos valores dibujados, para poder redibujar el gráfico
+// si el sistema cambia entre tema claro y oscuro.
+let ultimoGrafico = { entradas: 0, salidas: 0 };
+
+
+// CAMBIO 2: los colores de texto y rejilla NO se escriben a mano; se leen
+// del estilo real de la página. Así el gráfico siempre es legible con el
+// tema que tenga la página (hoy styles.css solo define tema claro).
+function coloresTema(){
+
+    const contenedor =
+        document.querySelector(".chart-container") || document.body;
+
+    const texto = getComputedStyle(contenedor).color; // ej: "rgb(38, 50, 56)"
+
+    const numeros = texto.match(/\d+(\.\d+)?/g);
+
+    let rejilla = "rgba(128, 128, 128, 0.2)";
+
+    if(numeros && numeros.length >= 3){
+
+        rejilla = `rgba(${numeros[0]}, ${numeros[1]}, ${numeros[2]}, 0.15)`;
+
+    }
+
+    return { texto, rejilla };
+
+}
+
+
 function crearGrafico(entradas, salidas){
+
+    ultimoGrafico = { entradas, salidas };
 
     // Si ya existe un gráfico previo, se destruye antes de crear otro;
     // si no, Chart.js va apilando instancias sobre el mismo <canvas>
@@ -278,19 +518,81 @@ function crearGrafico(entradas, salidas){
 
     }
 
+    const { texto, rejilla } = coloresTema();
+
     grafico = new Chart(
         document.getElementById("graficoMovimientos"),
         {
             type: "bar",
             data: {
                 labels: ["Entradas", "Salidas"],
-                datasets: [{
-                    label: "Unidades",
-                    data: [entradas, salidas]
-                }]
+
+                // CAMBIO 2: un dataset por serie para que la leyenda muestre
+                // "Entradas" en verde y "Salidas" en azul. El valor null deja
+                // vacío el otro lado; con los ejes apilados (stacked) cada
+                // barra queda centrada en su etiqueta.
+                datasets: [
+                    {
+                        label: "Entradas",
+                        data: [entradas, null],
+                        backgroundColor: COLOR_ENTRADAS,
+                        borderColor: COLOR_ENTRADAS,
+                        borderWidth: 1
+                    },
+                    {
+                        label: "Salidas",
+                        data: [null, salidas],
+                        backgroundColor: COLOR_SALIDAS,
+                        borderColor: COLOR_SALIDAS,
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: texto
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        ticks: { color: texto },
+                        grid: { color: rejilla }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: {
+                            color: texto,
+                            precision: 0
+                        },
+                        grid: { color: rejilla }
+                    }
+                }
             }
         }
     );
+
+}
+
+
+// CAMBIO 2: si el sistema cambia de tema claro/oscuro, se redibuja
+// para que texto y rejilla se actualicen con los colores vigentes.
+if(window.matchMedia){
+
+    window
+        .matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", () => {
+
+            crearGrafico(
+                ultimoGrafico.entradas,
+                ultimoGrafico.salidas
+            );
+
+        });
 
 }
 
@@ -312,7 +614,7 @@ function filtrarMovimientos(){
 }
 
 
-document.addEventListener("DOMContentLoaded", cargarMovimientos);
+document.addEventListener("DOMContentLoaded", () => cargarMovimientos());
 
 </script>
 

@@ -226,6 +226,73 @@ function autenticarToken(req, res, next) {
     }
 }
 
+/* =========================================================
+   CAMBIO 3: SOLO ADMINISTRADOR
+   ========================================================= */
+
+const ROL_ADMINISTRADOR = "administrador";
+
+// Debe usarse DESPUÉS de autenticarToken (necesita req.user).
+// Consulta el rol ACTUAL en la base de datos, no el del token: así, si un
+// administrador es degradado o eliminado, pierde el acceso de inmediato.
+async function soloAdmin(req, res, next) {
+
+    try {
+
+        const [
+            filas
+        ] =
+            await db.execute(
+                `
+                SELECT
+                    r.nombre_rol
+                FROM Usuario u
+                INNER JOIN Rol r
+                    ON u.id_rol = r.id_rol
+                WHERE u.id_usuario = ?
+                `,
+                [req.user.id_usuario]
+            );
+
+        if (
+            filas.length === 0 ||
+            String(filas[0].nombre_rol)
+                .trim()
+                .toLowerCase() !== ROL_ADMINISTRADOR
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                error:
+                    "No tiene permisos para realizar esta acción. Se requiere rol Administrador.",
+
+                message:
+                    "No tiene permisos para realizar esta acción. Se requiere rol Administrador."
+
+            });
+
+        }
+
+        next();
+
+    } catch (error) {
+
+        console.error("Error verificando permisos:", error);
+
+        return res.status(500).json({
+
+            success: false,
+
+            error:
+                "No fue posible verificar los permisos."
+
+        });
+
+    }
+
+}
 
 /* =========================================================
    LIMITADOR DE LOGIN
@@ -910,6 +977,65 @@ app.get(
 
         try {
 
+            // CAMBIO 4: búsqueda opcional ?search=texto
+            // Se ignora si no es texto (ej.: ?search=a&search=b) y se limita
+            // a 100 caracteres y 5 palabras.
+            const textoBusqueda =
+                typeof req.query.search === "string"
+                    ? req.query.search
+                        .trim()
+                        .toLowerCase()
+                        .slice(0, 100)
+                    : "";
+
+            const terminos =
+                textoBusqueda
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 5);
+
+            let filtro = "";
+
+            const parametros = [];
+
+            if (terminos.length > 0) {
+
+                // Cada palabra debe aparecer en el nombre O en la categoría.
+                // LOWER() + collation _ai_ci = sin mayúsculas ni tildes.
+                // El texto del SQL solo repite esta estructura fija; el
+                // contenido escrito por el usuario va SIEMPRE como parámetro (?).
+                const condiciones =
+                    terminos.map(
+                        () => `(
+                            LOWER(p.nombre_producto)
+                                COLLATE utf8mb4_0900_ai_ci LIKE ?
+                            OR
+                            LOWER(c.nombre_categoria)
+                                COLLATE utf8mb4_0900_ai_ci LIKE ?
+                        )`
+                    );
+
+                filtro =
+                    `WHERE ${condiciones.join(" AND ")}`;
+
+                terminos.forEach(
+                    termino => {
+
+                        // Se escapan \ % _ para que se busquen como texto
+                        // literal y no como comodines de LIKE.
+                        const patron =
+                            `%${termino.replace(/[\\%_]/g, "\\$&")}%`;
+
+                        parametros.push(
+                            patron,
+                            patron
+                        );
+
+                    }
+                );
+
+            }
+
             const [
                 result
             ] =
@@ -922,13 +1048,17 @@ app.get(
                         p.precio_unitario,
                         p.stock_actual,
                         p.stock_minimo,
+                        p.id_categoria,
                         c.nombre_categoria
                     FROM Producto p
                     INNER JOIN Categoria c
                         ON p.id_categoria =
                            c.id_categoria
+                    ${filtro}
                     ORDER BY p.id_producto
-                    `
+                    `,
+
+                    parametros
 
                 );
 
@@ -951,7 +1081,6 @@ app.get(
 
     }
 );
-
 
 app.post(
 
@@ -2671,6 +2800,44 @@ app.post(
    MOVIMIENTOS DE INVENTARIO
    ========================================================= */
 
+// CAMBIO 1: valida que el texto sea una fecha real con formato YYYY-MM-DD
+// (rechaza, por ejemplo, 2026-02-30 o "hola").
+function esFechaISOValida(valor) {
+
+    if (
+        typeof valor !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(valor)
+    ) {
+
+        return false;
+
+    }
+
+    const [
+        anio,
+        mes,
+        dia
+    ] =
+        valor.split("-").map(Number);
+
+    const fecha =
+        new Date(
+            Date.UTC(
+                anio,
+                mes - 1,
+                dia
+            )
+        );
+
+    return (
+        fecha.getUTCFullYear() === anio &&
+        fecha.getUTCMonth() === mes - 1 &&
+        fecha.getUTCDate() === dia
+    );
+
+}
+
+
 app.get(
 
     "/movimientos",
@@ -2681,11 +2848,103 @@ app.get(
 
         try {
 
+            // CAMBIO 1: parámetros opcionales ?fechaInicio=YYYY-MM-DD&fechaFin=YYYY-MM-DD
+            // Vacío o ausente = se usa el valor por defecto en el SQL.
+            const fechaInicio =
+                (
+                    req.query.fechaInicio === undefined ||
+                    req.query.fechaInicio === ""
+                )
+                    ? null
+                    : req.query.fechaInicio;
+
+            const fechaFin =
+                (
+                    req.query.fechaFin === undefined ||
+                    req.query.fechaFin === ""
+                )
+                    ? null
+                    : req.query.fechaFin;
+
+            if (
+                fechaInicio !== null &&
+                !esFechaISOValida(fechaInicio)
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "La fecha de inicio no es válida. Use el formato AAAA-MM-DD.",
+
+                    message:
+                        "La fecha de inicio no es válida. Use el formato AAAA-MM-DD."
+
+                });
+
+            }
+
+            if (
+                fechaFin !== null &&
+                !esFechaISOValida(fechaFin)
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "La fecha fin no es válida. Use el formato AAAA-MM-DD.",
+
+                    message:
+                        "La fecha fin no es válida. Use el formato AAAA-MM-DD."
+
+                });
+
+            }
+
+            // Las fechas ISO (YYYY-MM-DD) se pueden comparar como texto.
+            if (
+                fechaInicio !== null &&
+                fechaFin !== null &&
+                fechaInicio > fechaFin
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "La fecha de inicio no puede ser posterior a la fecha fin.",
+
+                    message:
+                        "La fecha de inicio no puede ser posterior a la fecha fin."
+
+                });
+
+            }
+
+            // La fecha fin incluye TODO el día (hasta 23:59:59).
+            const desde =
+                fechaInicio !== null
+                    ? `${fechaInicio} 00:00:00`
+                    : null;
+
+            const hasta =
+                fechaFin !== null
+                    ? `${fechaFin} 23:59:59`
+                    : null;
+
             const [
                 result
             ] =
                 await db.execute(
 
+                    // CAMBIO 1: BETWEEN con valores por defecto.
+                    //  - sin fechaInicio -> fecha MÁS ANTIGUA registrada (MIN)
+                    //  - sin fechaFin    -> momento actual (NOW())
+                    // CAST(? AS DATETIME) evita comparar texto contra DATETIME.
                     `
                     SELECT
                         m.id_movimiento,
@@ -2700,10 +2959,28 @@ app.get(
                     INNER JOIN Producto p
                         ON m.id_producto =
                            p.id_producto
+                    WHERE m.fecha_movimiento BETWEEN
+                        COALESCE(
+                            CAST(? AS DATETIME),
+                            (
+                                SELECT MIN(fecha_movimiento)
+                                FROM Movimiento_Inventario
+                            )
+                        )
+                        AND
+                        COALESCE(
+                            CAST(? AS DATETIME),
+                            NOW()
+                        )
                     ORDER BY
                         m.fecha_movimiento DESC,
                         m.id_movimiento DESC
-                    `
+                    `,
+
+                    [
+                        desde,
+                        hasta
+                    ]
 
                 );
 
@@ -3181,6 +3458,1201 @@ app.get(
 
     }
 
+);
+
+/* =========================================================
+   CAMBIO 3: EDITAR Y ELIMINAR (SOLO ADMINISTRADOR)
+   ========================================================= */
+
+// Valida que :id sea un entero positivo
+const validarIdParam = () =>
+    param("id")
+        .isInt({ min: 1 })
+        .withMessage("El identificador no es válido.");
+
+
+// Cuenta registros que dependen de un id. La consulta que recibe es siempre
+// un texto fijo escrito en este archivo; el id va parametrizado.
+async function contarRegistros(consulta, id) {
+
+    const [
+        filas
+    ] =
+        await db.execute(
+            consulta,
+            [id]
+        );
+
+    return Number(filas[0].total);
+
+}
+
+
+// Validaciones comunes de Cliente y Proveedor (mismas reglas que el POST)
+function validacionesContacto(etiqueta) {
+
+    return [
+
+        validarIdParam(),
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .withMessage(`El nombre del ${etiqueta} es obligatorio.`)
+            .isLength({ max: 100 })
+            .withMessage("El nombre no puede superar 100 caracteres."),
+
+        body("telefono")
+            .optional({ nullable: true })
+            .trim()
+            .isLength({ max: 15 })
+            .withMessage("El teléfono no puede superar 15 caracteres."),
+
+        body("correo")
+            .optional({ nullable: true })
+            .trim()
+            .custom(value => {
+
+                if (
+                    value &&
+                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+                ) {
+
+                    throw new Error("El correo no es válido.");
+
+                }
+
+                if (value && value.length > 100) {
+
+                    throw new Error("El correo no puede superar 100 caracteres.");
+
+                }
+
+                return true;
+
+            }),
+
+        body("direccion")
+            .optional({ nullable: true })
+            .trim()
+            .isLength({ max: 255 })
+            .withMessage("La dirección no puede superar 255 caracteres.")
+
+    ];
+
+}
+
+
+/* -----------------------------------------
+   CATEGORÍAS: PUT /categorias/:id
+----------------------------------------- */
+
+app.put(
+    "/categorias/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam(),
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .withMessage("El nombre de la categoría es obligatorio.")
+            .isLength({ max: 100 })
+            .withMessage("El nombre no puede superar 100 caracteres."),
+
+        body("descripcion")
+            .optional({ nullable: true })
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage("La descripción no puede superar 500 caracteres.")
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const {
+                nombre,
+                descripcion
+            } = req.body;
+
+            const [
+                existe
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_categoria
+                    FROM Categoria
+                    WHERE id_categoria = ?
+                    `,
+                    [id]
+                );
+
+            if (existe.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "La categoría no existe."
+                });
+
+            }
+
+            await db.execute(
+                `
+                UPDATE Categoria
+                SET
+                    nombre_categoria = ?,
+                    descripcion_categoria = ?
+                WHERE id_categoria = ?
+                `,
+                [
+                    nombre,
+                    descripcion || null,
+                    id
+                ]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Categoría actualizada correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (error.code === "ER_DUP_ENTRY") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "Ya existe otra categoría con ese nombre."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al actualizar la categoría."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   CATEGORÍAS: DELETE /categorias/:id
+----------------------------------------- */
+
+app.delete(
+    "/categorias/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam()
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const [
+                filas
+            ] =
+                await db.execute(
+                    `
+                    SELECT nombre_categoria
+                    FROM Categoria
+                    WHERE id_categoria = ?
+                    `,
+                    [id]
+                );
+
+            if (filas.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "La categoría no existe."
+                });
+
+            }
+
+            const productos =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Producto WHERE id_categoria = ?",
+                    id
+                );
+
+            if (productos > 0) {
+
+                return res.status(409).json({
+                    success: false,
+                    error:
+                        `No se puede eliminar la categoría "${filas[0].nombre_categoria}" ` +
+                        `porque tiene ${productos} producto(s) asociado(s). ` +
+                        "Reasigne o elimine primero esos productos."
+                });
+
+            }
+
+            await db.execute(
+                `
+                DELETE FROM Categoria
+                WHERE id_categoria = ?
+                `,
+                [id]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Categoría eliminada correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            // Red de seguridad si otro proceso creó una dependencia justo ahora
+            if (error.code === "ER_ROW_IS_REFERENCED_2") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "No se puede eliminar la categoría porque tiene registros asociados."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al eliminar la categoría."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   PRODUCTOS: PUT /productos/:id
+   (el stock NO se edita aquí: lo controlan las
+   ventas, compras y /productos/:id/reponer)
+----------------------------------------- */
+
+app.put(
+    "/productos/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam(),
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .withMessage("El nombre del producto es obligatorio.")
+            .isLength({ max: 100 })
+            .withMessage("El nombre no puede superar 100 caracteres."),
+
+        body("precio")
+            .isFloat({ min: 0 })
+            .withMessage("El precio debe ser un número mayor o igual a 0."),
+
+        body("minimo")
+            .isInt({ min: 0 })
+            .withMessage("El stock mínimo debe ser un entero mayor o igual a 0."),
+
+        body("categoria")
+            .isInt({ min: 1 })
+            .withMessage("Seleccione una categoría válida.")
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const {
+                nombre,
+                precio,
+                minimo,
+                categoria
+            } = req.body;
+
+            const [
+                existe
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_producto
+                    FROM Producto
+                    WHERE id_producto = ?
+                    `,
+                    [id]
+                );
+
+            if (existe.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El producto no existe."
+                });
+
+            }
+
+            const [
+                categoriaExiste
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_categoria
+                    FROM Categoria
+                    WHERE id_categoria = ?
+                    `,
+                    [categoria]
+                );
+
+            if (categoriaExiste.length === 0) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "La categoría no existe."
+                });
+
+            }
+
+            await db.execute(
+                `
+                UPDATE Producto
+                SET
+                    nombre_producto = ?,
+                    precio_unitario = ?,
+                    stock_minimo = ?,
+                    id_categoria = ?
+                WHERE id_producto = ?
+                `,
+                [
+                    nombre,
+                    precio,
+                    minimo,
+                    categoria,
+                    id
+                ]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Producto actualizado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+                success: false,
+                error: "Error al actualizar el producto."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   PRODUCTOS: DELETE /productos/:id
+----------------------------------------- */
+
+app.delete(
+    "/productos/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam()
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const [
+                filas
+            ] =
+                await db.execute(
+                    `
+                    SELECT nombre_producto
+                    FROM Producto
+                    WHERE id_producto = ?
+                    `,
+                    [id]
+                );
+
+            if (filas.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El producto no existe."
+                });
+
+            }
+
+            const ventas =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Detalle_Venta WHERE id_producto = ?",
+                    id
+                );
+
+            const compras =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Detalle_Compra WHERE id_producto = ?",
+                    id
+                );
+
+            const movimientos =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Movimiento_Inventario WHERE id_producto = ?",
+                    id
+                );
+
+            if (ventas + compras + movimientos > 0) {
+
+                const partes = [];
+
+                if (ventas > 0) partes.push(`${ventas} venta(s)`);
+                if (compras > 0) partes.push(`${compras} compra(s)`);
+                if (movimientos > 0) partes.push(`${movimientos} movimiento(s) de inventario`);
+
+                return res.status(409).json({
+                    success: false,
+                    error:
+                        `No se puede eliminar el producto "${filas[0].nombre_producto}" ` +
+                        `porque tiene historial registrado: ${partes.join(", ")}.`
+                });
+
+            }
+
+            await db.execute(
+                `
+                DELETE FROM Producto
+                WHERE id_producto = ?
+                `,
+                [id]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Producto eliminado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (error.code === "ER_ROW_IS_REFERENCED_2") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "No se puede eliminar el producto porque tiene registros asociados."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al eliminar el producto."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   CLIENTES: PUT /clientes/:id
+----------------------------------------- */
+
+app.put(
+    "/clientes/:id",
+    autenticarToken,
+    soloAdmin,
+    validacionesContacto("cliente"),
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const {
+                nombre,
+                telefono,
+                correo,
+                direccion
+            } = req.body;
+
+            const [
+                existe
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_cliente
+                    FROM Cliente
+                    WHERE id_cliente = ?
+                    `,
+                    [id]
+                );
+
+            if (existe.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El cliente no existe."
+                });
+
+            }
+
+            await db.execute(
+                `
+                UPDATE Cliente
+                SET
+                    nombre_cliente = ?,
+                    telefono = ?,
+                    correo = ?,
+                    direccion = ?
+                WHERE id_cliente = ?
+                `,
+                [
+                    nombre,
+                    telefono || null,
+                    correo || null,
+                    direccion || null,
+                    id
+                ]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Cliente actualizado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+                success: false,
+                error: "Error al actualizar el cliente."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   CLIENTES: DELETE /clientes/:id
+----------------------------------------- */
+
+app.delete(
+    "/clientes/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam()
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const [
+                filas
+            ] =
+                await db.execute(
+                    `
+                    SELECT nombre_cliente
+                    FROM Cliente
+                    WHERE id_cliente = ?
+                    `,
+                    [id]
+                );
+
+            if (filas.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El cliente no existe."
+                });
+
+            }
+
+            const ventas =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Venta WHERE id_cliente = ?",
+                    id
+                );
+
+            if (ventas > 0) {
+
+                return res.status(409).json({
+                    success: false,
+                    error:
+                        `No se puede eliminar al cliente "${filas[0].nombre_cliente}" ` +
+                        `porque tiene ${ventas} venta(s) registrada(s).`
+                });
+
+            }
+
+            await db.execute(
+                `
+                DELETE FROM Cliente
+                WHERE id_cliente = ?
+                `,
+                [id]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Cliente eliminado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (error.code === "ER_ROW_IS_REFERENCED_2") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "No se puede eliminar el cliente porque tiene registros asociados."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al eliminar el cliente."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   PROVEEDORES: PUT /proveedores/:id
+----------------------------------------- */
+
+app.put(
+    "/proveedores/:id",
+    autenticarToken,
+    soloAdmin,
+    validacionesContacto("proveedor"),
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const {
+                nombre,
+                telefono,
+                correo,
+                direccion
+            } = req.body;
+
+            const [
+                existe
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_proveedor
+                    FROM Proveedor
+                    WHERE id_proveedor = ?
+                    `,
+                    [id]
+                );
+
+            if (existe.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El proveedor no existe."
+                });
+
+            }
+
+            await db.execute(
+                `
+                UPDATE Proveedor
+                SET
+                    nombre_proveedor = ?,
+                    telefono = ?,
+                    correo = ?,
+                    direccion = ?
+                WHERE id_proveedor = ?
+                `,
+                [
+                    nombre,
+                    telefono || null,
+                    correo || null,
+                    direccion || null,
+                    id
+                ]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Proveedor actualizado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            res.status(500).json({
+                success: false,
+                error: "Error al actualizar el proveedor."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   PROVEEDORES: DELETE /proveedores/:id
+----------------------------------------- */
+
+app.delete(
+    "/proveedores/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam()
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const [
+                filas
+            ] =
+                await db.execute(
+                    `
+                    SELECT nombre_proveedor
+                    FROM Proveedor
+                    WHERE id_proveedor = ?
+                    `,
+                    [id]
+                );
+
+            if (filas.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El proveedor no existe."
+                });
+
+            }
+
+            const compras =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Compra WHERE id_proveedor = ?",
+                    id
+                );
+
+            if (compras > 0) {
+
+                return res.status(409).json({
+                    success: false,
+                    error:
+                        `No se puede eliminar al proveedor "${filas[0].nombre_proveedor}" ` +
+                        `porque tiene ${compras} compra(s) registrada(s).`
+                });
+
+            }
+
+            await db.execute(
+                `
+                DELETE FROM Proveedor
+                WHERE id_proveedor = ?
+                `,
+                [id]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Proveedor eliminado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (error.code === "ER_ROW_IS_REFERENCED_2") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "No se puede eliminar el proveedor porque tiene registros asociados."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al eliminar el proveedor."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   USUARIOS: PUT /usuarios/:id
+   (password es opcional: vacío = no se cambia)
+----------------------------------------- */
+
+app.put(
+    "/usuarios/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam(),
+
+        body("nombre")
+            .trim()
+            .notEmpty()
+            .withMessage("El nombre es obligatorio.")
+            .isLength({ max: 100 })
+            .withMessage("El nombre no puede superar 100 caracteres."),
+
+        body("correo")
+            .trim()
+            .isEmail()
+            .withMessage("Ingrese un correo electrónico válido.")
+            .normalizeEmail(),
+
+        body("rol")
+            .isInt({ min: 1 })
+            .withMessage("Seleccione un rol válido."),
+
+        body("password")
+            .optional({
+                nullable: true,
+                checkFalsy: true
+            })
+            .isLength({
+                min: 6,
+                max: 100
+            })
+            .withMessage("La contraseña debe tener entre 6 y 100 caracteres.")
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            const {
+                nombre,
+                correo,
+                rol,
+                password
+            } = req.body;
+
+            const [
+                usuarioActual
+            ] =
+                await db.execute(
+                    `
+                    SELECT
+                        id_usuario,
+                        id_rol
+                    FROM Usuario
+                    WHERE id_usuario = ?
+                    `,
+                    [id]
+                );
+
+            if (usuarioActual.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El usuario no existe."
+                });
+
+            }
+
+            // Evita que un administrador se quite a sí mismo el acceso
+            if (
+                id === req.user.id_usuario &&
+                Number(rol) !== usuarioActual[0].id_rol
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "No puede cambiar su propio rol."
+                });
+
+            }
+
+            const [
+                correoUsado
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_usuario
+                    FROM Usuario
+                    WHERE correo = ?
+                      AND id_usuario <> ?
+                    `,
+                    [
+                        correo,
+                        id
+                    ]
+                );
+
+            if (correoUsado.length > 0) {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "El correo ya está registrado por otro usuario."
+                });
+
+            }
+
+            const [
+                rolExiste
+            ] =
+                await db.execute(
+                    `
+                    SELECT id_rol
+                    FROM Rol
+                    WHERE id_rol = ?
+                    `,
+                    [rol]
+                );
+
+            if (rolExiste.length === 0) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "El rol seleccionado no existe."
+                });
+
+            }
+
+            if (password) {
+
+                const passwordHash =
+                    await bcrypt.hash(
+                        password,
+                        10
+                    );
+
+                await db.execute(
+                    `
+                    UPDATE Usuario
+                    SET
+                        nombre_usuario = ?,
+                        correo = ?,
+                        id_rol = ?,
+                        contrasena_hash = ?
+                    WHERE id_usuario = ?
+                    `,
+                    [
+                        nombre,
+                        correo,
+                        rol,
+                        passwordHash,
+                        id
+                    ]
+                );
+
+            } else {
+
+                await db.execute(
+                    `
+                    UPDATE Usuario
+                    SET
+                        nombre_usuario = ?,
+                        correo = ?,
+                        id_rol = ?
+                    WHERE id_usuario = ?
+                    `,
+                    [
+                        nombre,
+                        correo,
+                        rol,
+                        id
+                    ]
+                );
+
+            }
+
+            res.json({
+                success: true,
+                mensaje: "Usuario actualizado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (error.code === "ER_DUP_ENTRY") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "El correo ya está registrado por otro usuario."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al actualizar el usuario."
+            });
+
+        }
+
+    }
+);
+
+
+/* -----------------------------------------
+   USUARIOS: DELETE /usuarios/:id
+----------------------------------------- */
+
+app.delete(
+    "/usuarios/:id",
+    autenticarToken,
+    soloAdmin,
+    [
+        validarIdParam()
+    ],
+    validarRequest,
+    async (req, res) => {
+
+        try {
+
+            const id = Number(req.params.id);
+
+            // Un administrador no puede eliminar su propia cuenta
+            if (id === req.user.id_usuario) {
+
+                return res.status(400).json({
+                    success: false,
+                    error: "No puede eliminar su propia cuenta."
+                });
+
+            }
+
+            const [
+                filas
+            ] =
+                await db.execute(
+                    `
+                    SELECT nombre_usuario
+                    FROM Usuario
+                    WHERE id_usuario = ?
+                    `,
+                    [id]
+                );
+
+            if (filas.length === 0) {
+
+                return res.status(404).json({
+                    success: false,
+                    error: "El usuario no existe."
+                });
+
+            }
+
+            const ventas =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Venta WHERE id_usuario = ?",
+                    id
+                );
+
+            const compras =
+                await contarRegistros(
+                    "SELECT COUNT(*) AS total FROM Compra WHERE id_usuario = ?",
+                    id
+                );
+
+            if (ventas + compras > 0) {
+
+                const partes = [];
+
+                if (ventas > 0) partes.push(`${ventas} venta(s)`);
+                if (compras > 0) partes.push(`${compras} compra(s)`);
+
+                return res.status(409).json({
+                    success: false,
+                    error:
+                        `No se puede eliminar al usuario "${filas[0].nombre_usuario}" ` +
+                        `porque tiene registros asociados: ${partes.join(", ")}.`
+                });
+
+            }
+
+            await db.execute(
+                `
+                DELETE FROM Usuario
+                WHERE id_usuario = ?
+                `,
+                [id]
+            );
+
+            res.json({
+                success: true,
+                mensaje: "Usuario eliminado correctamente."
+            });
+
+        } catch (error) {
+
+            console.error(error);
+
+            if (error.code === "ER_ROW_IS_REFERENCED_2") {
+
+                return res.status(409).json({
+                    success: false,
+                    error: "No se puede eliminar el usuario porque tiene registros asociados."
+                });
+
+            }
+
+            res.status(500).json({
+                success: false,
+                error: "Error al eliminar el usuario."
+            });
+
+        }
+
+    }
 );
 
 

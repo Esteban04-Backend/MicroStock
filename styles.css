@@ -773,3 +773,314 @@ tr:hover {
     }
 
 }
+/* =========================================================
+   CAMBIO 3: EDITAR / ELIMINAR (botones, modales y avisos)
+   Prefijo "ms-" para no chocar con las clases .modal,
+   .btn-primary, etc. que ya existen en algunas páginas.
+   ========================================================= */
+
+/* ---------- Botones de acción en las tablas ---------- */
+
+.ms-acciones {
+    white-space: nowrap;
+}
+
+.ms-accion {
+    padding: 6px 10px;
+
+    margin: 2px;
+
+    font-size: 13px;
+
+    border-radius: 6px;
+
+    color: var(--white);
+}
+
+.ms-accion-editar {
+    background: var(--primary);
+}
+
+.ms-accion-editar:hover {
+    background: var(--primary-dark);
+}
+
+.ms-accion-eliminar {
+    background: var(--danger);
+}
+
+.ms-accion-eliminar:hover {
+    background: #b02a37;
+}
+
+
+/* ---------- Modal (fondo + ventana) ---------- */
+
+body.ms-sin-scroll {
+    overflow: hidden;
+}
+
+.ms-overlay {
+    position: fixed;
+
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 15px;
+
+    background: rgba(0, 0, 0, 0.5);
+
+    z-index: 1000;
+}
+
+.ms-dialog {
+    width: 100%;
+
+    max-width: 420px;
+
+    max-height: 90vh;
+
+    overflow-y: auto;
+
+    padding: 22px;
+
+    background: var(--white);
+
+    color: var(--text);
+
+    border-radius: var(--radius);
+
+    box-shadow: var(--shadow-hover);
+}
+
+.ms-dialog h3 {
+    margin: 0 0 12px;
+
+    color: var(--text);
+}
+
+.ms-dialog p {
+    margin: 0;
+
+    line-height: 1.5;
+}
+
+.ms-dialog-acciones {
+    display: flex;
+
+    justify-content: flex-end;
+
+    flex-wrap: wrap;
+
+    gap: 10px;
+
+    margin-top: 18px;
+}
+
+
+/* ---------- Campos del modal de edición ---------- */
+
+.ms-campo {
+    margin-bottom: 12px;
+}
+
+.ms-campo label {
+    display: block;
+
+    margin-bottom: 5px;
+
+    font-size: 14px;
+
+    font-weight: 600;
+}
+
+.ms-campo input,
+.ms-campo select {
+    width: 100%;
+
+    padding: 10px 12px;
+
+    border: 1px solid var(--border);
+
+    border-radius: 6px;
+
+    background: var(--white);
+
+    color: var(--text);
+
+    font-size: 16px;
+
+    outline: none;
+}
+
+.ms-campo input:focus,
+.ms-campo select:focus {
+    border-color: var(--primary);
+
+    box-shadow:
+        0 0 0 3px rgba(136, 43, 245, 0.12);
+}
+
+.ms-campo input[aria-invalid="true"],
+.ms-campo select[aria-invalid="true"] {
+    border-color: var(--danger);
+}
+
+.ms-campo-error {
+    display: block;
+
+    min-height: 16px;
+
+    margin-top: 3px;
+
+    color: var(--danger);
+
+    font-size: 13px;
+}
+
+.ms-ayuda {
+    display: block;
+
+    margin-top: 3px;
+
+    color: var(--text-light);
+
+    font-size: 12px;
+}
+
+.ms-form-error {
+    margin: 0 0 12px;
+
+    padding: 10px 12px;
+
+    background: var(--danger-light);
+
+    color: var(--danger);
+
+    border: 1px solid #f5c2c7;
+
+    border-radius: 6px;
+
+    font-size: 14px;
+
+    font-weight: 600;
+}
+
+
+/* ---------- Botones de los modales ---------- */
+
+.ms-btn {
+    padding: 10px 16px;
+
+    border: none;
+
+    border-radius: 6px;
+
+    color: var(--white);
+
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+.ms-btn-guardar {
+    background: var(--primary);
+}
+
+.ms-btn-guardar:hover {
+    background: var(--primary-dark);
+}
+
+.ms-btn-secundario {
+    background: #6b7280;
+}
+
+.ms-btn-secundario:hover {
+    background: #4b5563;
+}
+
+.ms-btn-peligro {
+    background: var(--danger);
+}
+
+.ms-btn-peligro:hover {
+    background: #b02a37;
+}
+
+
+/* ---------- Avisos (toast) ---------- */
+
+.ms-toast-container {
+    position: fixed;
+
+    top: 15px;
+
+    right: 15px;
+
+    display: flex;
+
+    flex-direction: column;
+
+    gap: 10px;
+
+    width: 360px;
+
+    max-width: calc(100% - 30px);
+
+    z-index: 1100;
+}
+
+.ms-toast {
+    padding: 12px 16px;
+
+    border-radius: 8px;
+
+    color: var(--white);
+
+    font-size: 14px;
+
+    font-weight: 600;
+
+    box-shadow: var(--shadow-hover);
+
+    cursor: pointer;
+}
+
+.ms-toast-success {
+    background: var(--success);
+}
+
+.ms-toast-error {
+    background: var(--danger);
+}
+
+
+/* ---------- Pantallas pequeñas ---------- */
+
+@media (max-width: 480px) {
+
+    .ms-toast-container {
+        left: 15px;
+
+        right: 15px;
+
+        width: auto;
+    }
+
+    .ms-dialog {
+        padding: 18px;
+    }
+
+    .ms-dialog-acciones .ms-btn {
+        flex: 1;
+    }
+
+}

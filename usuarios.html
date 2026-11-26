@@ -525,6 +525,18 @@ function renderUsuarios(lista){
 
     const tabla = document.getElementById("tablaUsuarios");
 
+    // CAMBIO 3: listeners de Editar/Eliminar (se registran una sola vez
+    // aunque la tabla se repinte al buscar o filtrar).
+    activarAccionesTabla("#tablaUsuarios", {
+        editar: editarUsuario,
+        eliminar: eliminarUsuario
+    });
+
+    // CAMBIO 3: id del usuario con sesión; en su propia fila no se
+    // muestra "Eliminar" (el backend también lo bloquea).
+    const usuarioSesion = getUsuarioActual();
+    const idSesion = usuarioSesion ? Number(usuarioSesion.id_usuario) : null;
+
     tabla.innerHTML = "";
 
     if(lista.length === 0){
@@ -553,13 +565,18 @@ function renderUsuarios(lista){
 
         const fila = document.createElement("tr");
 
+        // CAMBIO 3: la última celda ahora trae los botones (antes: "-")
         fila.innerHTML = `
         <td>${escapeHTML(u.id_usuario)}</td>
         <td>${escapeHTML(u.nombre_usuario)}</td>
         <td>${escapeHTML(u.correo)}</td>
         <td><span class="badge">${escapeHTML(u.nombre_rol)}</span></td>
         <td class="estado-activo">Activo</td>
-        <td>-</td>
+        ${celdaAccionesHTML(
+            u.id_usuario,
+            u.nombre_usuario,
+            { sinEliminar: Number(u.id_usuario) === idSesion }
+        )}
         `;
 
         tabla.appendChild(fila);
@@ -570,6 +587,176 @@ function renderUsuarios(lista){
     document.getElementById("countVendedor").innerText = vendedor;
     document.getElementById("countInventario").innerText = inventario;
     document.getElementById("countActivos").innerText = usuarios.length;
+
+}
+
+
+/* =========================================================
+   CAMBIO 3: EDITAR Y ELIMINAR USUARIO
+
+   Solo el Administrador ve los botones y el backend lo
+   vuelve a verificar (403 para cualquier otro rol).
+   ========================================================= */
+
+async function editarUsuario(id){
+
+    const usuario = usuarios.find(u => Number(u.id_usuario) === id);
+
+    if(!usuario){
+
+        mostrarToast(
+            "No se encontró el usuario. Actualice la página e intente de nuevo.",
+            "error"
+        );
+        return;
+
+    }
+
+    // Si los roles aún no se habían cargado, se piden de nuevo
+    if(roles.length === 0){
+
+        await cargarRoles();
+
+    }
+
+    if(roles.length === 0){
+
+        mostrarToast("No se pudieron cargar los roles.", "error");
+        return;
+
+    }
+
+    const usuarioSesion = getUsuarioActual();
+
+    const esCuentaPropia =
+        Boolean(usuarioSesion) &&
+        Number(usuarioSesion.id_usuario) === id;
+
+    // En la cuenta propia solo se ofrece el rol actual: así un
+    // administrador no puede quitarse el acceso a sí mismo.
+    const rolesDisponibles = esCuentaPropia
+        ? roles.filter(r => Number(r.id_rol) === Number(usuario.id_rol))
+        : roles;
+
+    const opcionesRol = [
+        { value: "", label: "Seleccione un rol" }
+    ].concat(
+        rolesDisponibles.map(r => ({
+            value: r.id_rol,
+            label: r.nombre_rol
+        }))
+    );
+
+    abrirModalEdicion({
+
+        titulo: "Editar usuario",
+
+        campos: [
+
+            {
+                name: "nombre",
+                etiqueta: "Nombre",
+                tipo: "text",
+                valor: usuario.nombre_usuario,
+                requerido: true,
+                maxLength: 100
+            },
+
+            {
+                name: "correo",
+                etiqueta: "Correo electrónico",
+                tipo: "email",
+                valor: usuario.correo,
+                requerido: true,
+                maxLength: 100,
+                autocomplete: "off"
+            },
+
+            {
+                name: "rol",
+                etiqueta: "Rol",
+                tipo: "select",
+                valor: usuario.id_rol,
+                requerido: true,
+                opciones: opcionesRol,
+                ayuda: esCuentaPropia
+                    ? "No puede cambiar su propio rol."
+                    : ""
+            },
+
+            {
+                name: "password",
+                etiqueta: "Nueva contraseña",
+                tipo: "password",
+                valor: "",
+                requerido: false,
+                minLength: 6,
+                maxLength: 100,
+                autocomplete: "new-password",
+                ayuda: "Déjela vacía para mantener la contraseña actual."
+            }
+
+        ],
+
+        // Los nombres del cuerpo coinciden con PUT /usuarios/:id del backend.
+        // La contraseña solo se envía si el administrador escribió una.
+        onGuardar: valores => {
+
+            const cuerpo = {
+                nombre: valores.nombre,
+                correo: valores.correo,
+                rol: Number(valores.rol)
+            };
+
+            if(valores.password !== ""){
+
+                cuerpo.password = valores.password;
+
+            }
+
+            return enviarEdicion(`/usuarios/${id}`, cuerpo);
+
+        },
+
+        onExito: cargarUsuarios
+
+    });
+
+}
+
+
+function eliminarUsuario(id){
+
+    const usuario = usuarios.find(u => Number(u.id_usuario) === id);
+
+    if(!usuario){
+
+        mostrarToast(
+            "No se encontró el usuario. Actualice la página e intente de nuevo.",
+            "error"
+        );
+        return;
+
+    }
+
+    const usuarioSesion = getUsuarioActual();
+
+    if(usuarioSesion && Number(usuarioSesion.id_usuario) === id){
+
+        mostrarToast("No puede eliminar su propia cuenta.", "error");
+        return;
+
+    }
+
+    return eliminarRegistro({
+
+        endpoint: `/usuarios/${id}`,
+
+        nombre: usuario.nombre_usuario,
+
+        onExito: cargarUsuarios
+
+    });
 
 }
 

@@ -341,10 +341,1005 @@ function logout() {
     );
 
 
-    window.location.href =
+        window.location.href =
         "login.html";
 
 }
+
+
+/* =========================================================
+   CAMBIO 3: EDITAR / ELIMINAR (UTILIDADES COMUNES)
+   ========================================================= */
+
+// ¿El usuario con sesión es Administrador? Solo decide qué botones se
+// muestran; la seguridad real la aplica el backend (middleware soloAdmin).
+function esAdministrador() {
+
+    const usuario =
+        getUsuarioActual();
+
+    return (
+        Boolean(usuario) &&
+        String(usuario.nombre_rol || "")
+            .trim()
+            .toLowerCase() === "administrador"
+    );
+
+}
+
+
+// Obtiene el mensaje más útil de una respuesta del backend
+function mensajeDeRespuesta(data, porDefecto) {
+
+    if (data) {
+
+        if (
+            Array.isArray(data.errors) &&
+            data.errors.length > 0 &&
+            data.errors[0].message
+        ) {
+
+            return data.errors[0].message;
+
+        }
+
+        if (data.mensaje) return data.mensaje;
+        if (data.error) return data.error;
+        if (data.message) return data.message;
+
+    }
+
+    return porDefecto;
+
+}
+
+
+/* -----------------------------------------
+   AVISOS (TOAST)
+----------------------------------------- */
+
+function mostrarToast(mensaje, tipo = "success") {
+
+    let contenedor =
+        document.getElementById("msToastContainer");
+
+    if (!contenedor) {
+
+        contenedor =
+            document.createElement("div");
+
+        contenedor.id = "msToastContainer";
+        contenedor.className = "ms-toast-container";
+        contenedor.setAttribute("aria-live", "polite");
+
+        document.body.appendChild(contenedor);
+
+    }
+
+    const esError =
+        tipo === "error";
+
+    const toast =
+        document.createElement("div");
+
+    toast.className =
+        esError
+            ? "ms-toast ms-toast-error"
+            : "ms-toast ms-toast-success";
+
+    toast.setAttribute(
+        "role",
+        esError ? "alert" : "status"
+    );
+
+    // textContent (no innerHTML): el mensaje puede contener nombres
+    // escritos por usuarios y nunca debe interpretarse como HTML.
+    toast.textContent = mensaje;
+
+    toast.addEventListener(
+        "click",
+        () => toast.remove()
+    );
+
+    contenedor.appendChild(toast);
+
+    setTimeout(
+        () => toast.remove(),
+        esError ? 6000 : 3500
+    );
+
+}
+
+
+/* -----------------------------------------
+   DIÁLOGO BASE (overlay, ESC, foco)
+----------------------------------------- */
+
+// Monta un diálogo sobre la página y devuelve la función cerrar(resultado).
+// opciones: { alCerrar, cerrarAlClicFuera, puedeCerrar }
+function montarDialogo(dialogo, opciones = {}) {
+
+    const elementoAnterior =
+        document.activeElement;
+
+    const overlay =
+        document.createElement("div");
+
+    overlay.className = "ms-overlay";
+
+    overlay.appendChild(dialogo);
+
+    document.body.appendChild(overlay);
+
+    document.body.classList.add("ms-sin-scroll");
+
+    function cerrar(resultado) {
+
+        document.removeEventListener(
+            "keydown",
+            alTeclear,
+            true
+        );
+
+        overlay.remove();
+
+        document.body.classList.remove("ms-sin-scroll");
+
+        if (
+            elementoAnterior &&
+            typeof elementoAnterior.focus === "function"
+        ) {
+
+            elementoAnterior.focus();
+
+        }
+
+        if (typeof opciones.alCerrar === "function") {
+
+            opciones.alCerrar(resultado);
+
+        }
+
+    }
+
+    // Cierre pedido por el usuario (ESC o clic fuera): respeta puedeCerrar
+    function solicitarCierre() {
+
+        if (
+            typeof opciones.puedeCerrar === "function" &&
+            !opciones.puedeCerrar()
+        ) {
+
+            return;
+
+        }
+
+        cerrar(false);
+
+    }
+
+    function alTeclear(evento) {
+
+        if (evento.key === "Escape") {
+
+            evento.preventDefault();
+
+            solicitarCierre();
+
+            return;
+
+        }
+
+        // Mantiene el foco dentro del diálogo al usar Tab
+        if (evento.key === "Tab") {
+
+            const enfocables =
+                Array.from(
+                    dialogo.querySelectorAll(
+                        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+                    )
+                );
+
+            if (enfocables.length === 0) {
+
+                return;
+
+            }
+
+            const primero = enfocables[0];
+            const ultimo = enfocables[enfocables.length - 1];
+
+            if (
+                evento.shiftKey &&
+                document.activeElement === primero
+            ) {
+
+                evento.preventDefault();
+                ultimo.focus();
+
+            } else if (
+                !evento.shiftKey &&
+                document.activeElement === ultimo
+            ) {
+
+                evento.preventDefault();
+                primero.focus();
+
+            }
+
+        }
+
+    }
+
+    if (opciones.cerrarAlClicFuera) {
+
+        overlay.addEventListener(
+            "mousedown",
+            evento => {
+
+                if (evento.target === overlay) {
+
+                    solicitarCierre();
+
+                }
+
+            }
+        );
+
+    }
+
+    document.addEventListener(
+        "keydown",
+        alTeclear,
+        true
+    );
+
+    return cerrar;
+
+}
+
+
+/* -----------------------------------------
+   CONFIRMAR ELIMINACIÓN
+----------------------------------------- */
+
+// Devuelve una promesa: true si el usuario confirma, false si cancela.
+function confirmarEliminacion(nombre) {
+
+    return new Promise(resolve => {
+
+        const dialogo =
+            document.createElement("div");
+
+        dialogo.className = "ms-dialog";
+        dialogo.setAttribute("role", "alertdialog");
+        dialogo.setAttribute("aria-modal", "true");
+        dialogo.setAttribute("aria-labelledby", "msConfirmTitulo");
+        dialogo.setAttribute("aria-describedby", "msConfirmMensaje");
+
+        const titulo =
+            document.createElement("h3");
+
+        titulo.id = "msConfirmTitulo";
+        titulo.textContent = "Confirmar eliminación";
+
+        const mensaje =
+            document.createElement("p");
+
+        mensaje.id = "msConfirmMensaje";
+
+        mensaje.textContent =
+            `¿Está seguro de que desea eliminar "${nombre}"? ` +
+            "Esta acción no se puede deshacer.";
+
+        const acciones =
+            document.createElement("div");
+
+        acciones.className = "ms-dialog-acciones";
+
+        const btnCancelar =
+            document.createElement("button");
+
+        btnCancelar.type = "button";
+        btnCancelar.className = "ms-btn ms-btn-secundario";
+        btnCancelar.textContent = "Cancelar";
+
+        const btnEliminar =
+            document.createElement("button");
+
+        btnEliminar.type = "button";
+        btnEliminar.className = "ms-btn ms-btn-peligro";
+        btnEliminar.textContent = "Eliminar";
+
+        acciones.appendChild(btnCancelar);
+        acciones.appendChild(btnEliminar);
+
+        dialogo.appendChild(titulo);
+        dialogo.appendChild(mensaje);
+        dialogo.appendChild(acciones);
+
+        const cerrar =
+            montarDialogo(
+                dialogo,
+                {
+                    alCerrar: resolve,
+                    cerrarAlClicFuera: true
+                }
+            );
+
+        btnCancelar.addEventListener(
+            "click",
+            () => cerrar(false)
+        );
+
+        btnEliminar.addEventListener(
+            "click",
+            () => cerrar(true)
+        );
+
+        // El foco inicial queda en "Cancelar" (opción segura)
+        btnCancelar.focus();
+
+    });
+
+}
+
+
+// Flujo completo: confirmar -> DELETE -> aviso -> refrescar lista.
+// onExito es la función que vuelve a consultar y pintar la tabla.
+async function eliminarRegistro({ endpoint, nombre, onExito }) {
+
+    const confirmado =
+        await confirmarEliminacion(nombre);
+
+    if (!confirmado) {
+
+        return;
+
+    }
+
+    try {
+
+        const response =
+            await apiFetch(
+                endpoint,
+                {
+                    method: "DELETE"
+                }
+            );
+
+        const data =
+            await getJSON(response);
+
+        if (!response.ok) {
+
+            mostrarToast(
+                mensajeDeRespuesta(
+                    data,
+                    "No se pudo eliminar el registro."
+                ),
+                "error"
+            );
+
+            return;
+
+        }
+
+        mostrarToast(
+            mensajeDeRespuesta(
+                data,
+                "Registro eliminado correctamente."
+            ),
+            "success"
+        );
+
+        if (typeof onExito === "function") {
+
+            await onExito();
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Error eliminando registro:",
+            error
+        );
+
+        mostrarToast(
+            "Error de conexión con el servidor.",
+            "error"
+        );
+
+    }
+
+}
+
+
+/* -----------------------------------------
+   MODAL DE EDICIÓN
+----------------------------------------- */
+
+// Valida un campo del modal. Devuelve el mensaje de error o "" si es válido.
+function validarCampoEdicion(campo, valor) {
+
+    if (campo.requerido && valor === "") {
+
+        return `Complete el campo "${campo.etiqueta}".`;
+
+    }
+
+    if (valor === "") {
+
+        return "";
+
+    }
+
+    if (
+        campo.tipo === "email" &&
+        !validarEmail(valor)
+    ) {
+
+        return "Ingrese un correo electrónico válido.";
+
+    }
+
+    if (campo.tipo === "number") {
+
+        const numero =
+            Number(valor);
+
+        if (!Number.isFinite(numero)) {
+
+            return "Ingrese un número válido.";
+
+        }
+
+        if (
+            campo.entero &&
+            !Number.isInteger(numero)
+        ) {
+
+            return "Ingrese un número entero.";
+
+        }
+
+        if (
+            campo.min !== undefined &&
+            numero < campo.min
+        ) {
+
+            return `El valor mínimo es ${campo.min}.`;
+
+        }
+
+    }
+
+    if (
+        campo.minLength &&
+        valor.length < campo.minLength
+    ) {
+
+        return `Debe tener al menos ${campo.minLength} caracteres.`;
+
+    }
+
+    return "";
+
+}
+
+
+// Abre un modal de edición con los datos precargados.
+//
+// config = {
+//   titulo:   "Editar producto",
+//   campos:   [{ name, etiqueta, tipo, valor, requerido, maxLength, min,
+//                entero, step, minLength, placeholder, ayuda, autocomplete,
+//                opciones: [{ value, label }]   // solo para tipo "select"
+//             }],
+//   onGuardar: async (valores) => ({ ok: boolean, mensaje: string }),
+//   onExito:   async () => { ...refrescar la lista... }
+// }
+function abrirModalEdicion(config) {
+
+    const campos =
+        config.campos || [];
+
+    let guardando = false;
+
+    const dialogo =
+        document.createElement("div");
+
+    dialogo.className = "ms-dialog";
+    dialogo.setAttribute("role", "dialog");
+    dialogo.setAttribute("aria-modal", "true");
+    dialogo.setAttribute("aria-labelledby", "msEditTitulo");
+
+    const titulo =
+        document.createElement("h3");
+
+    titulo.id = "msEditTitulo";
+    titulo.textContent = config.titulo || "Editar registro";
+
+    const form =
+        document.createElement("form");
+
+    form.noValidate = true;
+
+    const avisoError =
+        document.createElement("p");
+
+    avisoError.className = "ms-form-error";
+    avisoError.setAttribute("role", "alert");
+    avisoError.hidden = true;
+
+    form.appendChild(avisoError);
+
+    campos.forEach(campo => {
+
+        const idControl =
+            `msCampo_${campo.name}`;
+
+        const grupo =
+            document.createElement("div");
+
+        grupo.className = "ms-campo";
+
+        const etiqueta =
+            document.createElement("label");
+
+        etiqueta.htmlFor = idControl;
+
+        etiqueta.textContent =
+            campo.requerido
+                ? `${campo.etiqueta} *`
+                : campo.etiqueta;
+
+        let control;
+
+        if (campo.tipo === "select") {
+
+            control =
+                document.createElement("select");
+
+            (campo.opciones || []).forEach(opcion => {
+
+                const option =
+                    document.createElement("option");
+
+                option.value = opcion.value;
+                option.textContent = opcion.label;
+
+                if (
+                    String(opcion.value) ===
+                    String(campo.valor ?? "")
+                ) {
+
+                    option.selected = true;
+
+                }
+
+                control.appendChild(option);
+
+            });
+
+        } else {
+
+            control =
+                document.createElement("input");
+
+            control.type = campo.tipo || "text";
+
+            control.value =
+                campo.valor === null ||
+                campo.valor === undefined
+                    ? ""
+                    : String(campo.valor);
+
+            if (campo.maxLength) {
+
+                control.maxLength = campo.maxLength;
+
+            }
+
+            if (campo.min !== undefined) {
+
+                control.min = String(campo.min);
+
+            }
+
+            if (campo.step) {
+
+                control.step = String(campo.step);
+
+            }
+
+            if (campo.placeholder) {
+
+                control.placeholder = campo.placeholder;
+
+            }
+
+            if (campo.autocomplete) {
+
+                control.autocomplete = campo.autocomplete;
+
+            }
+
+        }
+
+        control.id = idControl;
+        control.name = campo.name;
+
+        if (campo.requerido) {
+
+            control.setAttribute("aria-required", "true");
+
+        }
+
+        const mensajeCampo =
+            document.createElement("span");
+
+        mensajeCampo.className = "ms-campo-error";
+        mensajeCampo.id = `${idControl}_error`;
+
+        control.setAttribute(
+            "aria-describedby",
+            `${idControl}_error`
+        );
+
+        grupo.appendChild(etiqueta);
+        grupo.appendChild(control);
+
+        if (campo.ayuda) {
+
+            const ayuda =
+                document.createElement("small");
+
+            ayuda.className = "ms-ayuda";
+            ayuda.textContent = campo.ayuda;
+
+            grupo.appendChild(ayuda);
+
+        }
+
+        grupo.appendChild(mensajeCampo);
+
+        form.appendChild(grupo);
+
+    });
+
+    const acciones =
+        document.createElement("div");
+
+    acciones.className = "ms-dialog-acciones";
+
+    const btnCancelar =
+        document.createElement("button");
+
+    btnCancelar.type = "button";
+    btnCancelar.className = "ms-btn ms-btn-secundario";
+    btnCancelar.textContent = "Cancelar";
+
+    const btnGuardar =
+        document.createElement("button");
+
+    btnGuardar.type = "submit";
+    btnGuardar.className = "ms-btn ms-btn-guardar";
+    btnGuardar.textContent = "Guardar cambios";
+
+    acciones.appendChild(btnCancelar);
+    acciones.appendChild(btnGuardar);
+
+    form.appendChild(acciones);
+
+    dialogo.appendChild(titulo);
+    dialogo.appendChild(form);
+
+    const cerrar =
+        montarDialogo(
+            dialogo,
+            {
+                // Con cambios sin guardar no se cierra por un clic accidental
+                cerrarAlClicFuera: false,
+                puedeCerrar: () => !guardando
+            }
+        );
+
+    function limpiarErrores() {
+
+        avisoError.hidden = true;
+        avisoError.textContent = "";
+
+        form.querySelectorAll(".ms-campo-error")
+            .forEach(elemento => {
+
+                elemento.textContent = "";
+
+            });
+
+        form.querySelectorAll("[aria-invalid]")
+            .forEach(elemento => {
+
+                elemento.removeAttribute("aria-invalid");
+
+            });
+
+    }
+
+    function mostrarErrorModal(mensaje) {
+
+        avisoError.textContent = mensaje;
+        avisoError.hidden = false;
+
+    }
+
+    btnCancelar.addEventListener(
+        "click",
+        () => cerrar(false)
+    );
+
+    form.addEventListener(
+        "submit",
+        async evento => {
+
+            evento.preventDefault();
+
+            if (guardando) {
+
+                return;
+
+            }
+
+            limpiarErrores();
+
+            const valores = {};
+
+            let primerError = null;
+
+            campos.forEach(campo => {
+
+                const control =
+                    form.elements[campo.name];
+
+                let valor =
+                    control.value;
+
+                // Las contraseñas no se recortan; el resto sí
+                if (campo.tipo !== "password") {
+
+                    valor = valor.trim();
+
+                }
+
+                const error =
+                    validarCampoEdicion(
+                        campo,
+                        valor
+                    );
+
+                if (error) {
+
+                    control.setAttribute(
+                        "aria-invalid",
+                        "true"
+                    );
+
+                    document.getElementById(
+                        `msCampo_${campo.name}_error`
+                    ).textContent = error;
+
+                    if (!primerError) {
+
+                        primerError = control;
+
+                    }
+
+                }
+
+                valores[campo.name] = valor;
+
+            });
+
+            if (primerError) {
+
+                primerError.focus();
+
+                return;
+
+            }
+
+            guardando = true;
+
+            btnGuardar.disabled = true;
+            btnCancelar.disabled = true;
+            btnGuardar.textContent = "Guardando...";
+
+            try {
+
+                const resultado =
+                    await config.onGuardar(valores);
+
+                if (resultado && resultado.ok) {
+
+                    guardando = false;
+
+                    cerrar(true);
+
+                    mostrarToast(
+                        resultado.mensaje ||
+                        "Cambios guardados correctamente.",
+                        "success"
+                    );
+
+                    if (typeof config.onExito === "function") {
+
+                        await config.onExito();
+
+                    }
+
+                    return;
+
+                }
+
+                mostrarErrorModal(
+                    (resultado && resultado.mensaje) ||
+                    "No se pudieron guardar los cambios."
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Error guardando cambios:",
+                    error
+                );
+
+                mostrarErrorModal(
+                    "Error de conexión con el servidor."
+                );
+
+            } finally {
+
+                guardando = false;
+
+                btnGuardar.disabled = false;
+                btnCancelar.disabled = false;
+                btnGuardar.textContent = "Guardar cambios";
+
+            }
+
+        }
+    );
+
+    if (campos.length > 0) {
+
+        form.elements[campos[0].name].focus();
+
+    }
+
+}
+
+
+// Envía un PUT y devuelve { ok, mensaje } (formato que espera onGuardar)
+async function enviarEdicion(endpoint, cuerpo) {
+
+    const response =
+        await apiFetch(
+            endpoint,
+            {
+                method: "PUT",
+                body: JSON.stringify(cuerpo)
+            }
+        );
+
+    const data =
+        await getJSON(response);
+
+    return {
+
+        ok: response.ok,
+
+        mensaje: mensajeDeRespuesta(
+            data,
+            response.ok
+                ? "Cambios guardados correctamente."
+                : "No se pudieron guardar los cambios."
+        )
+
+    };
+
+}
+
+
+/* -----------------------------------------
+   BOTONES DE ACCIÓN EN LAS TABLAS
+----------------------------------------- */
+
+// Devuelve el <td> de acciones de una fila. Solo el Administrador ve los
+// botones; para el resto se muestra un guion.
+// opciones.sinEliminar = true oculta "Eliminar" (ej.: la propia cuenta).
+function celdaAccionesHTML(id, nombre, opciones = {}) {
+
+    if (!esAdministrador()) {
+
+        return `<td class="ms-acciones">-</td>`;
+
+    }
+
+    const idSeguro =
+        escapeHTML(id);
+
+    const nombreSeguro =
+        escapeHTML(nombre);
+
+    const botonEliminar =
+        opciones.sinEliminar
+            ? ""
+            : `<button type="button" class="ms-accion ms-accion-eliminar" data-accion="eliminar" data-id="${idSeguro}" aria-label="Eliminar ${nombreSeguro}">🗑️ Eliminar</button>`;
+
+    return `
+        <td class="ms-acciones">
+            <button type="button" class="ms-accion ms-accion-editar" data-accion="editar" data-id="${idSeguro}" aria-label="Editar ${nombreSeguro}">✏️ Editar</button>
+            ${botonEliminar}
+        </td>
+    `;
+
+}
+
+
+// Escucha los clics de los botones Editar/Eliminar mediante delegación de
+// eventos (un solo listener por tabla, aunque se repinte la lista).
+// manejadores = { editar: id => {...}, eliminar: id => {...} }
+function activarAccionesTabla(selectorTbody, manejadores) {
+
+    const tbody =
+        document.querySelector(selectorTbody);
+
+    if (
+        !tbody ||
+        tbody.dataset.accionesListas === "1"
+    ) {
+
+        return;
+
+    }
+
+    tbody.dataset.accionesListas = "1";
+
+    tbody.addEventListener(
+        "click",
+        evento => {
+
+            const boton =
+                evento.target.closest("button[data-accion]");
+
+            if (
+                !boton ||
+                !tbody.contains(boton)
+            ) {
+
+                return;
+
+            }
+
+            const manejador =
+                manejadores[boton.dataset.accion];
+
+            if (typeof manejador === "function") {
+
+                manejador(Number(boton.dataset.id));
+
+            }
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   MOSTRAR / OCULTAR CONTRASEÑA
+   ========================================================= */
 
 
 /* =========================================================
@@ -1607,6 +2602,11 @@ async function registrarCategoria(event) {
 }
 
 
+// CAMBIO 3: copia del último listado recibido. Sirve para precargar el
+// modal de edición y para mostrar el nombre en la confirmación de borrado.
+let categoriasListado = [];
+
+
 async function mostrarCategorias() {
 
     const tabla =
@@ -1620,6 +2620,17 @@ async function mostrarCategorias() {
         return;
 
     }
+
+
+    // CAMBIO 3: listeners de Editar/Eliminar (se registran una sola vez
+    // aunque la tabla se repinte muchas veces).
+    activarAccionesTabla(
+        "#tablaCategorias tbody",
+        {
+            editar: editarCategoria,
+            eliminar: eliminarCategoria
+        }
+    );
 
 
     try {
@@ -1641,6 +2652,11 @@ async function mostrarCategorias() {
             return;
 
         }
+
+
+        // CAMBIO 3: se guarda el listado para el modal y el borrado
+        categoriasListado =
+            categorias;
 
 
         tabla.innerHTML =
@@ -1680,6 +2696,11 @@ async function mostrarCategorias() {
                         Activa
                     </td>
 
+                    ${celdaAccionesHTML(
+                        categoria.id_categoria,
+                        categoria.nombre_categoria
+                    )}
+
                 `;
 
 
@@ -1699,6 +2720,105 @@ async function mostrarCategorias() {
         );
 
     }
+
+}
+
+
+// CAMBIO 3: abre el modal de edición con los datos actuales de la categoría
+function editarCategoria(id) {
+
+    const categoria =
+        categoriasListado.find(
+            item => Number(item.id_categoria) === id
+        );
+
+
+    if (!categoria) {
+
+        mostrarToast(
+            "No se encontró la categoría. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    abrirModalEdicion({
+
+        titulo: "Editar categoría",
+
+        campos: [
+
+            {
+                name: "nombre",
+                etiqueta: "Nombre de la categoría",
+                tipo: "text",
+                valor: categoria.nombre_categoria,
+                requerido: true,
+                maxLength: 100
+            },
+
+            {
+                name: "descripcion",
+                etiqueta: "Descripción",
+                tipo: "text",
+                valor: categoria.descripcion_categoria,
+                requerido: false,
+                maxLength: 500
+            }
+
+        ],
+
+        // Los nombres del cuerpo coinciden con PUT /categorias/:id del backend
+        onGuardar: valores =>
+            enviarEdicion(
+                `/categorias/${id}`,
+                {
+                    nombre: valores.nombre,
+                    descripcion: valores.descripcion
+                }
+            ),
+
+        onExito: mostrarCategorias
+
+    });
+
+}
+
+
+// CAMBIO 3: confirma y elimina una categoría (el backend bloquea el borrado
+// si la categoría tiene productos asociados)
+function eliminarCategoria(id) {
+
+    const categoria =
+        categoriasListado.find(
+            item => Number(item.id_categoria) === id
+        );
+
+
+    if (!categoria) {
+
+        mostrarToast(
+            "No se encontró la categoría. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    return eliminarRegistro({
+
+        endpoint: `/categorias/${id}`,
+
+        nombre: categoria.nombre_categoria,
+
+        onExito: mostrarCategorias
+
+    });
 
 }
 
@@ -1849,6 +2969,83 @@ async function registrarProducto(event) {
 }
 
 
+// CAMBIO 3: copia del último listado recibido. Sirve para precargar el
+// modal de edición y para mostrar el nombre en la confirmación de borrado.
+let productosListado = [];
+
+
+// CAMBIO 4: control de la búsqueda de productos
+//  - temporizadorBusquedaProductos: retraso (debounce) de 300 ms
+//  - solicitudProductos: contador para ignorar respuestas viejas que
+//    lleguen después de una más reciente
+let temporizadorBusquedaProductos = null;
+let solicitudProductos = 0;
+
+
+// CAMBIO 4: conecta el campo "Buscar producto" (se hace una sola vez)
+function activarBuscadorProductos() {
+
+    const campo =
+        document.getElementById(
+            "buscarProducto"
+        );
+
+
+    if (
+        !campo ||
+        campo.dataset.buscadorListo === "1"
+    ) {
+
+        return;
+
+    }
+
+
+    campo.dataset.buscadorListo = "1";
+
+
+    // Al escribir: espera 300 ms sin teclear antes de consultar al servidor
+    campo.addEventListener(
+        "input",
+        () => {
+
+            clearTimeout(
+                temporizadorBusquedaProductos
+            );
+
+            temporizadorBusquedaProductos =
+                setTimeout(
+                    mostrarProductos,
+                    300
+                );
+
+        }
+    );
+
+
+    // Enter busca de inmediato
+    campo.addEventListener(
+        "keydown",
+        evento => {
+
+            if (evento.key === "Enter") {
+
+                evento.preventDefault();
+
+                clearTimeout(
+                    temporizadorBusquedaProductos
+                );
+
+                mostrarProductos();
+
+            }
+
+        }
+    );
+
+}
+
+
 async function mostrarProductos() {
 
     const tabla =
@@ -1864,11 +3061,50 @@ async function mostrarProductos() {
     }
 
 
+    // CAMBIO 3: listeners de Editar/Eliminar (se registran una sola vez
+    // aunque la tabla se repinte muchas veces).
+    activarAccionesTabla(
+        "#tablaProductos tbody",
+        {
+            editar: editarProducto,
+            eliminar: eliminarProducto
+        }
+    );
+
+
+    // CAMBIO 4: se conecta el buscador y se lee el texto actual del campo.
+    // Así, al editar, eliminar o registrar un producto, la lista se vuelve
+    // a pedir con el mismo filtro que el usuario tenía escrito.
+    activarBuscadorProductos();
+
+
+    const campoBusqueda =
+        document.getElementById(
+            "buscarProducto"
+        );
+
+
+    const termino =
+        campoBusqueda
+            ? campoBusqueda.value.trim()
+            : "";
+
+
+    const endpoint =
+        termino
+            ? `/productos?search=${encodeURIComponent(termino)}`
+            : "/productos";
+
+
+    const idSolicitud =
+        ++solicitudProductos;
+
+
     try {
 
         const response =
             await apiFetch(
-                "/productos"
+                endpoint
             );
 
 
@@ -1878,15 +3114,58 @@ async function mostrarProductos() {
             );
 
 
-        if (!response.ok) {
+        // CAMBIO 4: llegó una consulta más reciente; esta respuesta se descarta
+        if (idSolicitud !== solicitudProductos) {
 
             return;
 
         }
 
 
+        if (!response.ok) {
+
+            // CAMBIO 4: antes fallaba en silencio; ahora se avisa
+            mostrarToast(
+                mensajeDeRespuesta(
+                    productos,
+                    "No se pudieron cargar los productos."
+                ),
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        // CAMBIO 3: se guarda el listado para el modal y el borrado
+        productosListado =
+            productos;
+
+
         tabla.innerHTML =
             "";
+
+
+        // CAMBIO 4: mensaje cuando no hay resultados
+        if (productos.length === 0) {
+
+            const mensajeVacio =
+                termino
+                    ? "No se encontraron productos con ese criterio."
+                    : "No hay productos registrados.";
+
+            tabla.innerHTML = `
+                <tr>
+                    <td colspan="8" style="text-align:center;color:var(--text-light);padding:20px 0;">
+                        ${mensajeVacio}
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
 
 
         productos.forEach(
@@ -1978,6 +3257,11 @@ async function mostrarProductos() {
                         )}
                     </td>
 
+                    ${celdaAccionesHTML(
+                        producto.id_producto,
+                        producto.nombre_producto
+                    )}
+
                 `;
 
 
@@ -1997,6 +3281,200 @@ async function mostrarProductos() {
         );
 
     }
+
+}
+
+
+// CAMBIO 3: abre el modal de edición con los datos actuales del producto
+async function editarProducto(id) {
+
+    const producto =
+        productosListado.find(
+            item => Number(item.id_producto) === id
+        );
+
+
+    if (!producto) {
+
+        mostrarToast(
+            "No se encontró el producto. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    // El modal necesita la lista de categorías para el <select>
+    let categorias = [];
+
+    try {
+
+        const response =
+            await apiFetch(
+                "/categorias"
+            );
+
+
+        const data =
+            await getJSON(
+                response
+            );
+
+
+        if (
+            !response.ok ||
+            !Array.isArray(data)
+        ) {
+
+            mostrarToast(
+                mensajeDeRespuesta(
+                    data,
+                    "No se pudieron cargar las categorías."
+                ),
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        categorias =
+            data;
+
+    } catch (error) {
+
+        console.error(
+            "Error cargando categorías para editar:",
+            error
+        );
+
+        mostrarToast(
+            "Error de conexión con el servidor.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    const opcionesCategoria = [
+        {
+            value: "",
+            label: "Seleccione categoría"
+        }
+    ].concat(
+        categorias.map(
+            categoria => ({
+                value: categoria.id_categoria,
+                label: categoria.nombre_categoria
+            })
+        )
+    );
+
+
+    abrirModalEdicion({
+
+        titulo: "Editar producto",
+
+        campos: [
+
+            {
+                name: "nombre",
+                etiqueta: "Nombre del producto",
+                tipo: "text",
+                valor: producto.nombre_producto,
+                requerido: true,
+                maxLength: 100
+            },
+
+            {
+                name: "precio",
+                etiqueta: "Precio de venta",
+                tipo: "number",
+                valor: producto.precio_unitario,
+                requerido: true,
+                min: 0,
+                step: "any"
+            },
+
+            {
+                name: "minimo",
+                etiqueta: "Stock mínimo",
+                tipo: "number",
+                valor: producto.stock_minimo,
+                requerido: true,
+                min: 0,
+                entero: true,
+                step: 1,
+                ayuda:
+                    "El stock actual cambia con ventas, compras o reposición, no desde aquí."
+            },
+
+            {
+                name: "categoria",
+                etiqueta: "Categoría",
+                tipo: "select",
+                valor: producto.id_categoria,
+                requerido: true,
+                opciones: opcionesCategoria
+            }
+
+        ],
+
+        // Los nombres del cuerpo coinciden con PUT /productos/:id del backend
+        onGuardar: valores =>
+            enviarEdicion(
+                `/productos/${id}`,
+                {
+                    nombre: valores.nombre,
+                    precio: Number(valores.precio),
+                    minimo: Number(valores.minimo),
+                    categoria: Number(valores.categoria)
+                }
+            ),
+
+        onExito: mostrarProductos
+
+    });
+
+}
+
+
+// CAMBIO 3: confirma y elimina un producto (el backend bloquea el borrado
+// si el producto tiene ventas, compras o movimientos)
+function eliminarProducto(id) {
+
+    const producto =
+        productosListado.find(
+            item => Number(item.id_producto) === id
+        );
+
+
+    if (!producto) {
+
+        mostrarToast(
+            "No se encontró el producto. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    return eliminarRegistro({
+
+        endpoint: `/productos/${id}`,
+
+        nombre: producto.nombre_producto,
+
+        onExito: mostrarProductos
+
+    });
 
 }
 
@@ -2126,6 +3604,11 @@ async function registrarCliente(event) {
 }
 
 
+// CAMBIO 3: copia del último listado recibido. Sirve para precargar el
+// modal de edición y para mostrar el nombre en la confirmación de borrado.
+let clientesListado = [];
+
+
 async function mostrarClientes() {
 
     const tabla =
@@ -2139,6 +3622,17 @@ async function mostrarClientes() {
         return;
 
     }
+
+
+    // CAMBIO 3: listeners de Editar/Eliminar (se registran una sola vez
+    // aunque la tabla se repinte muchas veces).
+    activarAccionesTabla(
+        "#tablaClientes tbody",
+        {
+            editar: editarCliente,
+            eliminar: eliminarCliente
+        }
+    );
 
 
     try {
@@ -2160,6 +3654,11 @@ async function mostrarClientes() {
             return;
 
         }
+
+
+        // CAMBIO 3: se guarda el listado para el modal y el borrado
+        clientesListado =
+            clientes;
 
 
         tabla.innerHTML =
@@ -2211,6 +3710,11 @@ async function mostrarClientes() {
                         Activo
                     </td>
 
+                    ${celdaAccionesHTML(
+                        cliente.id_cliente,
+                        cliente.nombre_cliente
+                    )}
+
                 `;
 
 
@@ -2230,6 +3734,128 @@ async function mostrarClientes() {
         );
 
     }
+
+}
+
+
+// CAMBIO 3: abre el modal de edición con los datos actuales del cliente
+function editarCliente(id) {
+
+    const cliente =
+        clientesListado.find(
+            item => Number(item.id_cliente) === id
+        );
+
+
+    if (!cliente) {
+
+        mostrarToast(
+            "No se encontró el cliente. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    abrirModalEdicion({
+
+        titulo: "Editar cliente",
+
+        campos: [
+
+            {
+                name: "nombre",
+                etiqueta: "Nombre del cliente",
+                tipo: "text",
+                valor: cliente.nombre_cliente,
+                requerido: true,
+                maxLength: 100
+            },
+
+            {
+                name: "telefono",
+                etiqueta: "Teléfono",
+                tipo: "text",
+                valor: cliente.telefono,
+                requerido: false,
+                maxLength: 15,
+                autocomplete: "off"
+            },
+
+            {
+                name: "correo",
+                etiqueta: "Correo electrónico",
+                tipo: "email",
+                valor: cliente.correo,
+                requerido: false,
+                maxLength: 100,
+                autocomplete: "off"
+            },
+
+            {
+                name: "direccion",
+                etiqueta: "Dirección",
+                tipo: "text",
+                valor: cliente.direccion,
+                requerido: false,
+                maxLength: 255,
+                autocomplete: "off"
+            }
+
+        ],
+
+        // Los nombres del cuerpo coinciden con PUT /clientes/:id del backend
+        onGuardar: valores =>
+            enviarEdicion(
+                `/clientes/${id}`,
+                {
+                    nombre: valores.nombre,
+                    telefono: valores.telefono,
+                    correo: valores.correo,
+                    direccion: valores.direccion
+                }
+            ),
+
+        onExito: mostrarClientes
+
+    });
+
+}
+
+
+// CAMBIO 3: confirma y elimina un cliente (el backend bloquea el borrado
+// si el cliente tiene ventas registradas)
+function eliminarCliente(id) {
+
+    const cliente =
+        clientesListado.find(
+            item => Number(item.id_cliente) === id
+        );
+
+
+    if (!cliente) {
+
+        mostrarToast(
+            "No se encontró el cliente. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    return eliminarRegistro({
+
+        endpoint: `/clientes/${id}`,
+
+        nombre: cliente.nombre_cliente,
+
+        onExito: mostrarClientes
+
+    });
 
 }
 
@@ -2359,6 +3985,11 @@ async function registrarProveedor(event) {
 }
 
 
+// CAMBIO 3: copia del último listado recibido. Sirve para precargar el
+// modal de edición y para mostrar el nombre en la confirmación de borrado.
+let proveedoresListado = [];
+
+
 async function mostrarProveedores() {
 
     const tabla =
@@ -2372,6 +4003,17 @@ async function mostrarProveedores() {
         return;
 
     }
+
+
+    // CAMBIO 3: listeners de Editar/Eliminar (se registran una sola vez
+    // aunque la tabla se repinte muchas veces).
+    activarAccionesTabla(
+        "#tablaProveedores tbody",
+        {
+            editar: editarProveedor,
+            eliminar: eliminarProveedor
+        }
+    );
 
 
     try {
@@ -2393,6 +4035,11 @@ async function mostrarProveedores() {
             return;
 
         }
+
+
+        // CAMBIO 3: se guarda el listado para el modal y el borrado
+        proveedoresListado =
+            proveedores;
 
 
         tabla.innerHTML =
@@ -2444,6 +4091,11 @@ async function mostrarProveedores() {
                         Activo
                     </td>
 
+                    ${celdaAccionesHTML(
+                        proveedor.id_proveedor,
+                        proveedor.nombre_proveedor
+                    )}
+
                 `;
 
 
@@ -2463,6 +4115,128 @@ async function mostrarProveedores() {
         );
 
     }
+
+}
+
+
+// CAMBIO 3: abre el modal de edición con los datos actuales del proveedor
+function editarProveedor(id) {
+
+    const proveedor =
+        proveedoresListado.find(
+            item => Number(item.id_proveedor) === id
+        );
+
+
+    if (!proveedor) {
+
+        mostrarToast(
+            "No se encontró el proveedor. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    abrirModalEdicion({
+
+        titulo: "Editar proveedor",
+
+        campos: [
+
+            {
+                name: "nombre",
+                etiqueta: "Nombre del proveedor",
+                tipo: "text",
+                valor: proveedor.nombre_proveedor,
+                requerido: true,
+                maxLength: 100
+            },
+
+            {
+                name: "telefono",
+                etiqueta: "Teléfono",
+                tipo: "text",
+                valor: proveedor.telefono,
+                requerido: false,
+                maxLength: 15,
+                autocomplete: "off"
+            },
+
+            {
+                name: "correo",
+                etiqueta: "Correo electrónico",
+                tipo: "email",
+                valor: proveedor.correo,
+                requerido: false,
+                maxLength: 100,
+                autocomplete: "off"
+            },
+
+            {
+                name: "direccion",
+                etiqueta: "Dirección",
+                tipo: "text",
+                valor: proveedor.direccion,
+                requerido: false,
+                maxLength: 255,
+                autocomplete: "off"
+            }
+
+        ],
+
+        // Los nombres del cuerpo coinciden con PUT /proveedores/:id del backend
+        onGuardar: valores =>
+            enviarEdicion(
+                `/proveedores/${id}`,
+                {
+                    nombre: valores.nombre,
+                    telefono: valores.telefono,
+                    correo: valores.correo,
+                    direccion: valores.direccion
+                }
+            ),
+
+        onExito: mostrarProveedores
+
+    });
+
+}
+
+
+// CAMBIO 3: confirma y elimina un proveedor (el backend bloquea el borrado
+// si el proveedor tiene compras registradas)
+function eliminarProveedor(id) {
+
+    const proveedor =
+        proveedoresListado.find(
+            item => Number(item.id_proveedor) === id
+        );
+
+
+    if (!proveedor) {
+
+        mostrarToast(
+            "No se encontró el proveedor. Actualice la página e intente de nuevo.",
+            "error"
+        );
+
+        return;
+
+    }
+
+
+    return eliminarRegistro({
+
+        endpoint: `/proveedores/${id}`,
+
+        nombre: proveedor.nombre_proveedor,
+
+        onExito: mostrarProveedores
+
+    });
 
 }
 
