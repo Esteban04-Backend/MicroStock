@@ -194,6 +194,48 @@ nav a:hover {
 }
 
 
+/* PUNTO 1: tarjeta de alertas de stock (se pone roja si hay alertas) */
+
+.card-alerta {
+    border: 2px solid transparent;
+
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.3s ease,
+        border-color 0.3s ease,
+        color 0.3s ease;
+}
+
+.card-alerta .card-icono {
+    display: block;
+
+    margin: 0 auto 8px;
+
+    color: var(--text-light);
+
+    transition: color 0.3s ease;
+}
+
+.card-alerta.alerta-activa {
+    background-color: #DC2626;
+
+    border-color: #B91C1C;
+
+    color: #FFFFFF;
+
+    box-shadow: 0 8px 25px rgba(220, 38, 38, 0.35);
+}
+
+.card-alerta.alerta-activa .card-icono {
+    color: #FFFFFF;
+}
+
+.card-alerta.alerta-activa:hover {
+    box-shadow: 0 12px 30px rgba(220, 38, 38, 0.45);
+}
+
+
 /* =========================================================
    FORMULARIOS GENERALES
    ========================================================= */
@@ -1081,6 +1123,91 @@ body.ms-sin-scroll {
 
     .ms-dialog-acciones .ms-btn {
         flex: 1;
+    }
+
+}
+
+
+/* =========================================================
+   PUNTO 2: TARJETAS DE MOVIMIENTOS (ENTRADAS Y SALIDAS)
+   ========================================================= */
+
+.grid-movimientos {
+    display: grid;
+
+    grid-template-columns: repeat(4, 1fr);
+
+    gap: 20px;
+}
+
+.card-mov {
+    min-width: 0;
+
+    border-top: 4px solid transparent;
+}
+
+.card-mov-entrada {
+    border-top-color: #16A34A;
+}
+
+.card-mov-salida {
+    border-top-color: #2563EB;
+}
+
+.card-mov .card-icono {
+    display: block;
+
+    margin: 0 auto 6px;
+}
+
+.card-icono-entrada {
+    color: #16A34A;
+}
+
+.card-icono-salida {
+    color: #2563EB;
+}
+
+.card-mov h3 {
+    margin: 0 0 4px;
+}
+
+.card-mov p {
+    margin: 6px 0;
+
+    font-size: 32px;
+
+    font-weight: 700;
+
+    line-height: 1.1;
+}
+
+.card-mov span {
+    color: var(--text-light);
+
+    font-size: 13px;
+}
+
+/* Tablet y móvil: 2 columnas (2x2) */
+@media (max-width: 768px) {
+
+    .grid-movimientos {
+        grid-template-columns: repeat(2, 1fr);
+
+        gap: 12px;
+    }
+
+    .card-mov p {
+        font-size: 26px;
+    }
+
+}
+
+/* Móvil muy pequeño: una sola columna */
+@media (max-width: 360px) {
+
+    .grid-movimientos {
+        grid-template-columns: 1fr;
     }
 
 }

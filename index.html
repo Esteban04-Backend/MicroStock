@@ -108,24 +108,20 @@ margin-left:auto;
 </div>
 
 
-<div class="card">
+<!-- PUNTO 1: esta tarjeta se pone roja cuando hay al menos una alerta de stock -->
+<div class="card card-alerta" id="tarjetaAlertas">
+
+<svg class="card-icono" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+<line x1="12" y1="9" x2="12" y2="13"></line>
+<line x1="12" y1="17" x2="12.01" y2="17"></line>
+</svg>
 
 <h3>Alertas de stock</h3>
 
-<p id="totalAlertas">0</p>
+<p id="totalAlertas" aria-live="polite">0</p>
 
 <span>Productos con stock bajo</span>
-
-</div>
-
-
-<div class="card">
-
-<h3>Movimientos registrados</h3>
-
-<p id="totalMovimientos">0</p>
-
-<span>Entradas y salidas de inventario</span>
 
 </div>
 
@@ -137,6 +133,78 @@ margin-left:auto;
 <p>Activo</p>
 
 <span>Gestión de inventario funcionando</span>
+
+</div>
+
+</div>
+
+<br>
+
+<!-- PUNTO 2: reemplaza la tarjeta "Movimientos registrados" por 4 tarjetas -->
+<h2>Movimientos de inventario</h2>
+
+<div class="grid-movimientos">
+
+<div class="card card-mov card-mov-entrada">
+
+<svg class="card-icono card-icono-entrada" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="19" x2="12" y2="5"></line>
+<polyline points="5 12 12 5 19 12"></polyline>
+</svg>
+
+<h3>Entradas totales</h3>
+
+<p id="entradasTotales">0</p>
+
+<span>Histórico completo</span>
+
+</div>
+
+
+<div class="card card-mov card-mov-entrada">
+
+<svg class="card-icono card-icono-entrada" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="19" x2="12" y2="5"></line>
+<polyline points="5 12 12 5 19 12"></polyline>
+</svg>
+
+<h3>Entradas de hoy</h3>
+
+<p id="entradasHoy">0</p>
+
+<span id="fechaEntradasHoy">Hoy</span>
+
+</div>
+
+
+<div class="card card-mov card-mov-salida">
+
+<svg class="card-icono card-icono-salida" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="5" x2="12" y2="19"></line>
+<polyline points="19 12 12 19 5 12"></polyline>
+</svg>
+
+<h3>Salidas totales</h3>
+
+<p id="salidasTotales">0</p>
+
+<span>Histórico completo</span>
+
+</div>
+
+
+<div class="card card-mov card-mov-salida">
+
+<svg class="card-icono card-icono-salida" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="5" x2="12" y2="19"></line>
+<polyline points="19 12 12 19 5 12"></polyline>
+</svg>
+
+<h3>Salidas de hoy</h3>
+
+<p id="salidasHoy">0</p>
+
+<span id="fechaSalidasHoy">Hoy</span>
 
 </div>
 

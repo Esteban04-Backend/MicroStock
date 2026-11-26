@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+<meta charset="UTF-8">
+<title>MicroStock | Dashboard</title>
+
+<link rel="stylesheet" href="styles.css">
+<script defer src="script.js"></script>
+
+<style>
+
+.nav-logout{
+
+background:#c0392b;
+color:white;
+border:none;
+padding:8px 14px;
+border-radius:4px;
+cursor:pointer;
+font-size:14px;
+
+}
+
+.nav-logout:hover{
+
+background:#a93226;
+
+}
+
+nav ul{
+
+display:flex;
+align-items:center;
+flex-wrap:wrap;
+gap:10px;
+
+}
+
+.nav-spacer{
+
+margin-left:auto;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>MicroStock</h1>
+<p>Sistema inteligente de gestión de inventario</p>
+
+</header>
+
+<nav>
+
+<ul>
+
+<li><a href="index.html">Dashboard</a></li>
+<li><a href="productos.html">Productos</a></li>
+<li><a href="categorias.html">Categorías</a></li>
+<li><a href="proveedores.html">Proveedores</a></li>
+<li><a href="clientes.html">Clientes</a></li>
+<li><a href="ventas.html">Ventas</a></li>
+<li><a href="compras.html">Compras</a></li>
+<li><a href="inventario.html">Inventario</a></li>
+<li><a href="movimientos_inventario.html">Movimientos</a></li>
+<li><a href="alertas_stock.html">Alertas</a></li>
+<li><a href="usuarios.html">Usuarios</a></li>
+
+<!--
+    script.js ya trae la función logout() y busca automáticamente
+    un elemento con id="logoutButton" para engancharle el evento
+    click (ver script.js, sección LOGOUT, al final del archivo).
+    Sin este botón en el HTML, esa función nunca se conecta a nada,
+    por eso no aparecía "Cerrar sesión" ni funcionaba en ninguna
+    página, aunque script.js ya estuviera cargado.
+-->
+<li class="nav-spacer">
+    <button id="logoutButton" class="nav-logout" type="button">
+        Cerrar sesión
+    </button>
+</li>
+
+</ul>
+
+</nav>
+
+<div class="container">
+
+<h2>Panel de control</h2>
+
+<div class="card-grid">
+
+<div class="card">
+
+<h3>Total productos</h3>
+
+<p id="totalProductos">0</p>
+
+<span>Productos registrados en el sistema</span>
+
+</div>
+
+
+<!-- PUNTO 1: esta tarjeta se pone roja cuando hay al menos una alerta de stock -->
+<div class="card card-alerta" id="tarjetaAlertas">
+
+<svg class="card-icono" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+<line x1="12" y1="9" x2="12" y2="13"></line>
+<line x1="12" y1="17" x2="12.01" y2="17"></line>
+</svg>
+
+<h3>Alertas de stock</h3>
+
+<p id="totalAlertas" aria-live="polite">0</p>
+
+<span>Productos con stock bajo</span>
+
+</div>
+
+
+<div class="card">
+
+<h3>Estado del sistema</h3>
+
+<p>Activo</p>
+
+<span>Gestión de inventario funcionando</span>
+
+</div>
+
+</div>
+
+<br>
+
+<!-- PUNTO 2: reemplaza la tarjeta "Movimientos registrados" por 4 tarjetas -->
+<h2>Movimientos de inventario</h2>
+
+<div class="grid-movimientos">
+
+<div class="card card-mov card-mov-entrada">
+
+<svg class="card-icono card-icono-entrada" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="19" x2="12" y2="5"></line>
+<polyline points="5 12 12 5 19 12"></polyline>
+</svg>
+
+<h3>Entradas totales</h3>
+
+<p id="entradasTotales">0</p>
+
+<span>Histórico completo</span>
+
+</div>
+
+
+<div class="card card-mov card-mov-entrada">
+
+<svg class="card-icono card-icono-entrada" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="19" x2="12" y2="5"></line>
+<polyline points="5 12 12 5 19 12"></polyline>
+</svg>
+
+<h3>Entradas de hoy</h3>
+
+<p id="entradasHoy">0</p>
+
+<span id="fechaEntradasHoy">Hoy</span>
+
+</div>
+
+
+<div class="card card-mov card-mov-salida">
+
+<svg class="card-icono card-icono-salida" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="5" x2="12" y2="19"></line>
+<polyline points="19 12 12 19 5 12"></polyline>
+</svg>
+
+<h3>Salidas totales</h3>
+
+<p id="salidasTotales">0</p>
+
+<span>Histórico completo</span>
+
+</div>
+
+
+<div class="card card-mov card-mov-salida">
+
+<svg class="card-icono card-icono-salida" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<line x1="12" y1="5" x2="12" y2="19"></line>
+<polyline points="19 12 12 19 5 12"></polyline>
+</svg>
+
+<h3>Salidas de hoy</h3>
+
+<p id="salidasHoy">0</p>
+
+<span id="fechaSalidasHoy">Hoy</span>
+
+</div>
+
+</div>
+
+<br>
+
+<h2>Acceso rápido</h2>
+
+<div class="card-grid">
+
+<div class="card">
+
+<h3>Registrar producto</h3>
+
+<p>Agregar nuevos productos al inventario.</p>
+
+<a href="productos.html">
+<button>Ir al módulo</button>
+</a>
+
+</div>
+
+
+<div class="card">
+
+<h3>Registrar venta</h3>
+
+<p>Registrar ventas y actualizar inventario.</p>
+
+<a href="ventas.html">
+<button>Ir al módulo</button>
+</a>
+
+</div>
+
+
+<div class="card">
+
+<h3>Registrar compra</h3>
+
+<p>Registrar compras a proveedores.</p>
+
+<a href="compras.html">
+<button>Ir al módulo</button>
+</a>
+
+</div>
+
+
+<div class="card">
+
+<h3>Ver inventario</h3>
+
+<p>Consultar el estado actual del inventario.</p>
+
+<a href="inventario.html">
+<button>Ver inventario</button>
+</a>
+
+</div>
+
+</div>
+
+</div>
+
+<footer style="text-align:center;padding:20px;margin-top:30px;">
+
+<p>MicroStock - Sistema de gestión de inventario para microempresarios</p>
+
+</footer>
+
+</body>
+
+</html>

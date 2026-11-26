@@ -2607,6 +2607,78 @@ async function registrarCategoria(event) {
 let categoriasListado = [];
 
 
+// PUNTO 2: control de la búsqueda de categorías
+//  - temporizadorBusquedaCategorias: retraso (debounce) de 300 ms
+//  - solicitudCategorias: contador para ignorar respuestas viejas que
+//    lleguen después de una más reciente
+let temporizadorBusquedaCategorias = null;
+let solicitudCategorias = 0;
+
+
+// PUNTO 2: conecta el campo "Buscar categoría" (se hace una sola vez)
+function activarBuscadorCategorias() {
+
+    const campo =
+        document.getElementById(
+            "buscarCategoria"
+        );
+
+
+    if (
+        !campo ||
+        campo.dataset.buscadorListo === "1"
+    ) {
+
+        return;
+
+    }
+
+
+    campo.dataset.buscadorListo = "1";
+
+
+    // Al escribir: espera 300 ms sin teclear antes de consultar al servidor
+    campo.addEventListener(
+        "input",
+        () => {
+
+            clearTimeout(
+                temporizadorBusquedaCategorias
+            );
+
+            temporizadorBusquedaCategorias =
+                setTimeout(
+                    mostrarCategorias,
+                    300
+                );
+
+        }
+    );
+
+
+    // Enter busca de inmediato
+    campo.addEventListener(
+        "keydown",
+        evento => {
+
+            if (evento.key === "Enter") {
+
+                evento.preventDefault();
+
+                clearTimeout(
+                    temporizadorBusquedaCategorias
+                );
+
+                mostrarCategorias();
+
+            }
+
+        }
+    );
+
+}
+
+
 async function mostrarCategorias() {
 
     const tabla =
@@ -2633,11 +2705,34 @@ async function mostrarCategorias() {
     );
 
 
+    // PUNTO 2: se conecta el buscador (solo la primera vez) y se lee su texto
+    activarBuscadorCategorias();
+
+    const campoBusqueda =
+        document.getElementById(
+            "buscarCategoria"
+        );
+
+    const termino =
+        campoBusqueda
+            ? campoBusqueda.value.trim()
+            : "";
+
+    const idSolicitud =
+        ++solicitudCategorias;
+
+
     try {
+
+        // PUNTO 2: con texto se consulta /categorias?search=..., sin texto el listado completo
+        const endpoint =
+            termino
+                ? `/categorias?search=${encodeURIComponent(termino)}`
+                : "/categorias";
 
         const response =
             await apiFetch(
-                "/categorias"
+                endpoint
             );
 
 
@@ -2645,6 +2740,14 @@ async function mostrarCategorias() {
             await getJSON(
                 response
             );
+
+
+        // PUNTO 2: llegó una consulta más reciente; se descarta esta respuesta
+        if (idSolicitud !== solicitudCategorias) {
+
+            return;
+
+        }
 
 
         if (!response.ok) {
@@ -2661,6 +2764,26 @@ async function mostrarCategorias() {
 
         tabla.innerHTML =
             "";
+
+
+        // PUNTO 2: mensaje cuando no hay resultados
+        if (categorias.length === 0) {
+
+            tabla.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align:center;color:var(--text-light);padding:20px 0;">
+                        ${
+                            termino
+                                ? "No se encontraron categorías con ese criterio."
+                                : "No hay categorías registradas."
+                        }
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
 
 
         categorias.forEach(
@@ -5881,13 +6004,84 @@ async function cargarUsuariosSelect(
    DASHBOARD
    ========================================================= */
 
+// PUNTO 2: fecha local del equipo del usuario en formato YYYY-MM-DD
+// (se usa la local y no la UTC de toISOString(), que de noche daría el día siguiente)
+function fechaLocalISO(fecha = new Date()) {
+
+    const anio =
+        fecha.getFullYear();
+
+    const mes =
+        String(fecha.getMonth() + 1).padStart(2, "0");
+
+    const dia =
+        String(fecha.getDate()).padStart(2, "0");
+
+    return `${anio}-${mes}-${dia}`;
+
+}
+
+
+// PUNTO 2: fecha en formato DD/MM/YYYY para mostrar en pantalla
+function formatearFechaCorta(fecha = new Date()) {
+
+    const dia =
+        String(fecha.getDate()).padStart(2, "0");
+
+    const mes =
+        String(fecha.getMonth() + 1).padStart(2, "0");
+
+    return `${dia}/${mes}/${fecha.getFullYear()}`;
+
+}
+
+
+// PUNTO 2: escribe "Hoy: DD/MM/YYYY" en las tarjetas "de hoy"
+function mostrarFechaHoyDashboard(fecha) {
+
+    const texto =
+        `Hoy: ${formatearFechaCorta(fecha)}`;
+
+
+    [
+        "fechaEntradasHoy",
+        "fechaSalidasHoy"
+    ].forEach(
+        id => {
+
+            const elemento =
+                document.getElementById(id);
+
+            if (elemento) {
+
+                elemento.textContent = texto;
+
+            }
+
+        }
+    );
+
+}
+
+
 async function cargarDashboard() {
+
+    // PUNTO 2: la fecha de "hoy" se toma del sistema en CADA carga
+    // (nunca fija), así cambia sola cuando pasa la medianoche.
+    const ahora =
+        new Date();
+
+
+    mostrarFechaHoyDashboard(
+        ahora
+    );
+
 
     try {
 
         const response =
             await apiFetch(
-                "/dashboard"
+                `/dashboard?fecha=${fechaLocalISO(ahora)}`
             );
 
 
@@ -5916,12 +6110,6 @@ async function cargarDashboard() {
             );
 
 
-        const totalMovimientos =
-            document.getElementById(
-                "totalMovimientos"
-            );
-
-
         if (totalProductos) {
 
             totalProductos.textContent =
@@ -5938,12 +6126,35 @@ async function cargarDashboard() {
         }
 
 
-        if (totalMovimientos) {
+        // PUNTO 1: la tarjeta de alertas se pone roja si hay al menos una
+        aplicarEstadoAlertas(
+            Number(datos.totalAlertas)
+        );
 
-            totalMovimientos.textContent =
-                datos.totalMovimientos;
 
-        }
+        // PUNTO 2: valores de las 4 tarjetas de movimientos
+        // (reemplazan a la antigua tarjeta "Movimientos registrados")
+        [
+            "entradasTotales",
+            "entradasHoy",
+            "salidasTotales",
+            "salidasHoy"
+        ].forEach(
+            id => {
+
+                const elemento =
+                    document.getElementById(id);
+
+                if (elemento) {
+
+                    elemento.textContent =
+                        Number(datos[id] || 0)
+                            .toLocaleString("es-CO");
+
+                }
+
+            }
+        );
 
     } catch (error) {
 
@@ -5953,6 +6164,81 @@ async function cargarDashboard() {
         );
 
     }
+
+}
+
+
+// PUNTO 1: activa o quita el rojo de la tarjeta de alertas de stock
+function aplicarEstadoAlertas(totalAlertas) {
+
+    const tarjeta =
+        document.getElementById(
+            "tarjetaAlertas"
+        );
+
+
+    if (!tarjeta) {
+
+        return;
+
+    }
+
+
+    const hayAlertas =
+        Number.isFinite(totalAlertas) &&
+        totalAlertas > 0;
+
+
+    tarjeta.classList.toggle(
+        "alerta-activa",
+        hayAlertas
+    );
+
+}
+
+
+// PUNTO 1: mantiene el dashboard al día sin recargar la página.
+// Vuelve a consultar cada 60 segundos y cada vez que el usuario regresa
+// a la pestaña. Se registra una sola vez aunque se llame varias veces.
+let temporizadorDashboard = null;
+
+
+function iniciarActualizacionDashboard() {
+
+    if (temporizadorDashboard !== null) {
+
+        return;
+
+    }
+
+
+    temporizadorDashboard =
+        setInterval(
+            () => {
+
+                if (document.visibilityState === "visible") {
+
+                    cargarDashboard();
+
+                }
+
+            },
+            60000
+        );
+
+
+    document.addEventListener(
+        "visibilitychange",
+        () => {
+
+            if (document.visibilityState === "visible") {
+
+                cargarDashboard();
+
+            }
+
+        }
+    );
 
 }
 
@@ -6297,6 +6583,8 @@ document.addEventListener(
         ) {
 
             cargarDashboard();
+            // PUNTO 1: actualización automática (cada 60 s y al volver a la pestaña)
+            iniciarActualizacionDashboard();
 
         }
 

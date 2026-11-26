@@ -824,6 +824,64 @@ app.get(
 
         try {
 
+            // PUNTO 2: búsqueda opcional ?search=texto (nombre o descripción).
+            // Se ignora si no es texto (ej.: ?search=a&search=b) y se limita
+            // a 100 caracteres y 5 palabras (mismo criterio que /productos).
+            const textoBusqueda =
+                typeof req.query.search === "string"
+                    ? req.query.search
+                        .trim()
+                        .toLowerCase()
+                        .slice(0, 100)
+                    : "";
+
+            const terminos =
+                textoBusqueda
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 5);
+
+            let filtro = "";
+
+            const parametros = [];
+
+            if (terminos.length > 0) {
+
+                // Cada palabra debe aparecer en el nombre O en la descripción.
+                // LOWER() + LIKE: no distingue mayúsculas; las tildes las
+                // ignora la collation "ai_ci" de la tabla. El texto escrito
+                // por el usuario va SIEMPRE como parámetro (?), nunca
+                // concatenado al SQL.
+                const condiciones =
+                    terminos.map(
+                        () => `(
+                            LOWER(nombre_categoria) LIKE ?
+                            OR
+                            LOWER(descripcion_categoria) LIKE ?
+                        )`
+                    );
+
+                filtro =
+                    `WHERE ${condiciones.join(" AND ")}`;
+
+                terminos.forEach(
+                    termino => {
+
+                        // Se escapan \ % _ para buscarlos como texto literal
+                        // y no como comodines de LIKE.
+                        const patron =
+                            `%${termino.replace(/[\\%_]/g, "\\$&")}%`;
+
+                        parametros.push(
+                            patron,
+                            patron
+                        );
+
+                    }
+                );
+
+            }
+
             const [
                 result
             ] =
@@ -835,8 +893,11 @@ app.get(
                         nombre_categoria,
                         descripcion_categoria
                     FROM Categoria
+                    ${filtro}
                     ORDER BY nombre_categoria
-                    `
+                    `,
+
+                    parametros
 
                 );
 
@@ -1001,17 +1062,19 @@ app.get(
             if (terminos.length > 0) {
 
                 // Cada palabra debe aparecer en el nombre O en la categoría.
-                // LOWER() + collation _ai_ci = sin mayúsculas ni tildes.
+                // LOWER() + LIKE: no distingue mayúsculas. Las tildes las
+                // ignora la collation de la tabla (en MySQL 8 y MariaDB la
+                // predeterminada ya es "ai_ci"). No se fuerza ninguna
+                // collation por nombre porque MySQL 8 y MariaDB no usan los
+                // mismos nombres y la consulta fallaría en uno de los dos.
                 // El texto del SQL solo repite esta estructura fija; el
                 // contenido escrito por el usuario va SIEMPRE como parámetro (?).
                 const condiciones =
                     terminos.map(
                         () => `(
-                            LOWER(p.nombre_producto)
-                                COLLATE utf8mb4_0900_ai_ci LIKE ?
+                            LOWER(p.nombre_producto) LIKE ?
                             OR
-                            LOWER(c.nombre_categoria)
-                                COLLATE utf8mb4_0900_ai_ci LIKE ?
+                            LOWER(c.nombre_categoria) LIKE ?
                         )`
                     );
 
@@ -3382,6 +3445,58 @@ app.get(
 
         try {
 
+            // PUNTO 2: el navegador envía su fecha local (?fecha=YYYY-MM-DD)
+            // para que "hoy" coincida con la que ve el usuario. Si no la
+            // envía, se usa la fecha actual del servidor de base de datos.
+            const fechaParametro =
+                (
+                    req.query.fecha === undefined ||
+                    req.query.fecha === ""
+                )
+                    ? null
+                    : req.query.fecha;
+
+            if (
+                fechaParametro !== null &&
+                !esFechaISOValida(fechaParametro)
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    error:
+                        "La fecha no es válida. Use el formato AAAA-MM-DD."
+
+                });
+
+            }
+
+            let hoy = fechaParametro;
+
+            if (hoy === null) {
+
+                const [
+                    filaFecha
+                ] =
+                    await db.execute(
+
+                        `
+                        SELECT
+                            DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS hoy
+                        `
+
+                    );
+
+                hoy = filaFecha[0].hoy;
+
+            }
+
+            // Rango completo del día (de 00:00:00 a 23:59:59)
+            const inicioHoy = `${hoy} 00:00:00`;
+            const finHoy = `${hoy} 23:59:59`;
+
+
             const [
                 productos
             ] =
@@ -3412,6 +3527,9 @@ app.get(
                 );
 
 
+            // PUNTO 2: una sola consulta con los 5 conteos.
+            // COUNT(CASE ...) solo cuenta las filas que cumplen la condición.
+            // Los "ajustes" no se cuentan como entradas ni como salidas.
             const [
                 movimientos
             ] =
@@ -3419,9 +3537,47 @@ app.get(
 
                     `
                     SELECT
-                        COUNT(*) AS total
+                        COUNT(*) AS total,
+
+                        COUNT(
+                            CASE
+                                WHEN tipo_movimiento = 'entrada'
+                                THEN 1
+                            END
+                        ) AS entradasTotales,
+
+                        COUNT(
+                            CASE
+                                WHEN tipo_movimiento = 'entrada'
+                                 AND fecha_movimiento BETWEEN ? AND ?
+                                THEN 1
+                            END
+                        ) AS entradasHoy,
+
+                        COUNT(
+                            CASE
+                                WHEN tipo_movimiento = 'salida'
+                                THEN 1
+                            END
+                        ) AS salidasTotales,
+
+                        COUNT(
+                            CASE
+                                WHEN tipo_movimiento = 'salida'
+                                 AND fecha_movimiento BETWEEN ? AND ?
+                                THEN 1
+                            END
+                        ) AS salidasHoy
+
                     FROM Movimiento_Inventario
-                    `
+                    `,
+
+                    [
+                        inicioHoy,
+                        finHoy,
+                        inicioHoy,
+                        finHoy
+                    ]
 
                 );
 
@@ -3437,7 +3593,23 @@ app.get(
                     alertas[0].total,
 
                 totalMovimientos:
-                    movimientos[0].total
+                    movimientos[0].total,
+
+                // PUNTO 2: valores de las 4 tarjetas nuevas
+                fechaHoy:
+                    hoy,
+
+                entradasTotales:
+                    movimientos[0].entradasTotales,
+
+                entradasHoy:
+                    movimientos[0].entradasHoy,
+
+                salidasTotales:
+                    movimientos[0].salidasTotales,
+
+                salidasHoy:
+                    movimientos[0].salidasHoy
 
             });
 

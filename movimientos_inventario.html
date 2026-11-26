@@ -10,6 +10,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
+<!-- PUNTO 1: librerías de exportación (solo se cargan en esta página) -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
 <!-- Necesario para apiFetch(), getToken() y escapeHTML() -->
 <script src="script.js" defer></script>
 
@@ -121,6 +126,56 @@ font-size:13px;
 margin:0 0 15px;
 }
 
+/* PUNTO 1: botón Exportar con menú desplegable */
+.exportar-wrap{
+position:relative;
+display:inline-block;
+}
+
+.exportar-menu{
+position:absolute;
+top:calc(100% + 6px);
+left:0;
+min-width:190px;
+background:var(--white);
+border:1px solid var(--border);
+border-radius:6px;
+box-shadow:var(--shadow);
+padding:6px;
+z-index:50;
+display:flex;
+flex-direction:column;
+gap:4px;
+}
+
+/* necesario: display:flex anularía el atributo hidden */
+.exportar-menu[hidden]{
+display:none;
+}
+
+.exportar-menu button{
+background:transparent;
+color:var(--text);
+text-align:left;
+width:100%;
+font-weight:500;
+}
+
+.exportar-menu button:hover,
+.exportar-menu button:focus-visible{
+background:var(--background);
+color:var(--primary-dark);
+transform:none;
+box-shadow:none;
+}
+
+/* móvil: el botón y el menú ocupan todo el ancho */
+@media (max-width:480px){
+.exportar-wrap{width:100%;}
+.exportar-wrap > button{width:100%;}
+.exportar-menu{left:0;right:0;}
+}
+
 </style>
 
 </head>
@@ -209,6 +264,15 @@ id="buscarMov"
 onkeyup="filtrarMovimientos()"
 >
 
+<!-- PUNTO 1: botón Exportar (PDF / Excel) -->
+<div class="exportar-wrap" id="exportarWrap">
+<button type="button" id="btnExportar" aria-haspopup="true" aria-expanded="false" aria-controls="menuExportar">Exportar ▾</button>
+<div class="exportar-menu" id="menuExportar" role="menu" aria-labelledby="btnExportar" hidden>
+<button type="button" role="menuitem" id="btnExportarPDF">PDF (.pdf)</button>
+<button type="button" role="menuitem" id="btnExportarExcel">Excel (.xlsx)</button>
+</div>
+</div>
+
 </div>
 
 <!-- CAMBIO 1: mensaje de error de fechas y resumen del rango aplicado -->
@@ -241,6 +305,9 @@ onkeyup="filtrarMovimientos()"
 
 let movimientos = [];
 let grafico = null;
+
+// PUNTO 1: lo que se ve actualmente en la tabla (ya con filtros). Es lo que se exporta.
+let movimientosVisibles = [];
 
 // CAMBIO 1: contador de peticiones. Si el usuario pulsa "Filtrar" varias
 // veces seguidas, solo se pinta la respuesta de la última petición.
@@ -331,6 +398,7 @@ async function cargarMovimientos(fechaInicio = "", fechaFin = ""){
             // CAMBIO 1: se limpian datos, totales y gráfico para que no
             // queden valores de una consulta anterior junto al error.
             movimientos = [];
+            movimientosVisibles = [];// PUNTO 1: evita exportar datos viejos tras un error
             document.getElementById("totalMov").innerText = 0;
             document.getElementById("totalEntradas").innerText = 0;
             document.getElementById("totalSalidas").innerText = 0;
@@ -421,6 +489,9 @@ function limpiarFiltros(){
 
 
 function renderMovimientos(lista = movimientos){
+
+    // PUNTO 1: se guarda exactamente lo que se está mostrando
+    movimientosVisibles = lista;
 
     const tabla = document.getElementById("tablaMov");
     tabla.innerHTML = "";
@@ -612,6 +683,356 @@ function filtrarMovimientos(){
     renderMovimientos(filtrados);
 
 }
+
+
+/* =========================================================
+   PUNTO 1: EXPORTAR A PDF / EXCEL
+   Exporta lo que está visible (movimientosVisibles) sin consultar
+   de nuevo al backend y sin recargar la página.
+   ========================================================= */
+
+const COLUMNAS_EXPORT = ["Fecha", "Producto", "Tipo", "Cantidad", "Referencia"];
+
+function dosDigitos(numero){
+
+    return String(numero).padStart(2, "0");
+
+}
+
+
+// Ej.: "25/11/2026 14:30" (hora local del navegador)
+function fechaHoraExportacion(){
+
+    const d = new Date();
+
+    return `${dosDigitos(d.getDate())}/${dosDigitos(d.getMonth() + 1)}/${d.getFullYear()} ` +
+           `${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}`;
+
+}
+
+
+// Ej.: "2026-11-25" (fecha local, no UTC, para el nombre del archivo)
+function fechaArchivo(){
+
+    const d = new Date();
+
+    return `${d.getFullYear()}-${dosDigitos(d.getMonth() + 1)}-${dosDigitos(d.getDate())}`;
+
+}
+
+
+// Misma fecha que se ve en la tabla. Se reemplazan los espacios especiales
+// (U+202F / U+00A0) que algunos navegadores insertan y que jsPDF no dibuja bien.
+function textoFechaMovimiento(valor){
+
+    return new Date(valor).toLocaleString().replace(/[\u202F\u00A0]/g, " ");
+
+}
+
+
+function textoTipoMovimiento(m){
+
+    const tipo = (m.tipo_movimiento || "").toLowerCase();
+
+    return tipo.charAt(0).toUpperCase() + tipo.slice(1);
+
+}
+
+
+function filasExportacion(){
+
+    return movimientosVisibles.map(m => [
+        textoFechaMovimiento(m.fecha_movimiento),
+        String(m.nombre_producto ?? ""),
+        textoTipoMovimiento(m),
+        Number(m.cantidad),
+        String(m.referencia_tipo ?? "")
+    ]);
+
+}
+
+
+function resumenExportacion(){
+
+    let entradas = 0;
+    let salidas = 0;
+
+    movimientosVisibles.forEach(m => {
+
+        const tipo = (m.tipo_movimiento || "").toLowerCase();
+
+        if(tipo === "entrada") entradas += Number(m.cantidad);
+        if(tipo === "salida") salidas += Number(m.cantidad);
+
+    });
+
+    return { total: movimientosVisibles.length, entradas, salidas };
+
+}
+
+
+// Resume los filtros realmente aplicados (rango consultado, tipo y búsqueda)
+function descripcionFiltros(){
+
+    const partes = [];
+
+    const rango = document.getElementById("rangoActual").textContent.trim();
+
+    if(rango) partes.push(rango.replace(/\.$/, ""));
+
+    const selectTipo = document.getElementById("filtroTipo");
+
+    if(selectTipo.value){
+
+        partes.push(`Tipo: ${selectTipo.options[selectTipo.selectedIndex].text}`);
+
+    }
+
+    const busqueda = document.getElementById("buscarMov").value.trim();
+
+    if(busqueda) partes.push(`Búsqueda: "${busqueda}"`);
+
+    return partes.join(" | ");
+
+}
+
+
+function hayDatosParaExportar(){
+
+    if(movimientosVisibles.length === 0){
+
+        alert("No hay movimientos visibles para exportar con los filtros actuales.");
+
+        return false;
+
+    }
+
+    return true;
+
+}
+
+
+function exportarPDF(){
+
+    if(!hayDatosParaExportar()) return;
+
+    if(!window.jspdf || !window.jspdf.jsPDF){
+
+        alert("No se pudo cargar la librería de PDF. Verifique su conexión a Internet e intente de nuevo.");
+
+        return;
+
+    }
+
+    const { jsPDF } = window.jspdf;
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+
+    const margen = 40;
+    const anchoPagina = doc.internal.pageSize.getWidth();
+    const exportadoEl = `Exportado el: ${fechaHoraExportacion()}`;
+    const filtros = descripcionFiltros();
+    const resumen = resumenExportacion();
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("MicroStock - Movimientos de inventario", margen, 40);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(exportadoEl, margen, 58);
+
+    let y = 74;
+
+    if(filtros){
+
+        const lineas = doc.splitTextToSize(`Filtros: ${filtros}`, anchoPagina - margen * 2);
+
+        doc.text(lineas, margen, y);
+
+        y += lineas.length * 12;
+
+    }
+
+    doc.text(
+        `Total: ${resumen.total}  |  Entradas: ${resumen.entradas}  |  Salidas: ${resumen.salidas}`,
+        margen,
+        y
+    );
+
+    y += 12;
+
+    // Gráfica (opcional): se incluye como imagen si existe
+    if(grafico){
+
+        try{
+
+            const imagen = grafico.toBase64Image("image/png", 1);
+
+            const proporcion = grafico.height / grafico.width;
+
+            let ancho = 320;
+            let alto = ancho * proporcion;
+
+            if(alto > 200){
+
+                alto = 200;
+                ancho = alto / proporcion;
+
+            }
+
+            doc.addImage(imagen, "PNG", margen, y, ancho, alto);
+
+            y += alto + 14;
+
+        }catch(error){
+
+            // Si la gráfica no se puede convertir, se exporta solo la tabla.
+
+        }
+
+    }
+
+    doc.autoTable({
+
+        startY: y,
+        head: [COLUMNAS_EXPORT],
+        body: filasExportacion(),
+        styles: { fontSize: 9, cellPadding: 4 },
+        headStyles: { fillColor: [136, 43, 245] },
+        columnStyles: { 3: { halign: "right" } },
+        margin: { left: margen, right: margen, bottom: 40 },
+
+        // Pie de cada página: fecha de exportación y número de página
+        didDrawPage: () => {
+
+            const alturaPagina = doc.internal.pageSize.getHeight();
+
+            doc.setFontSize(8);
+            doc.setTextColor(100);
+            doc.text(exportadoEl, margen, alturaPagina - 20);
+            doc.text(
+                `Página ${doc.internal.getCurrentPageInfo().pageNumber}`,
+                anchoPagina - margen,
+                alturaPagina - 20,
+                { align: "right" }
+            );
+            doc.setTextColor(0);
+
+        }
+
+    });
+
+    doc.save(`movimientos_${fechaArchivo()}.pdf`);
+
+}
+
+
+function exportarExcel(){
+
+    if(!hayDatosParaExportar()) return;
+
+    if(typeof XLSX === "undefined"){
+
+        alert("No se pudo cargar la librería de Excel. Verifique su conexión a Internet e intente de nuevo.");
+
+        return;
+
+    }
+
+    const resumen = resumenExportacion();
+    const filtros = descripcionFiltros();
+
+    const filas = [
+        ["MicroStock - Movimientos de inventario"],
+        [`Exportado el: ${fechaHoraExportacion()}`],
+        [filtros ? `Filtros: ${filtros}` : "Filtros: ninguno"],
+        [],
+        COLUMNAS_EXPORT,
+        ...filasExportacion(),
+        [],
+        ["Total movimientos", resumen.total],
+        ["Total entradas", resumen.entradas],
+        ["Total salidas", resumen.salidas]
+    ];
+
+    const hoja = XLSX.utils.aoa_to_sheet(filas);
+
+    hoja["!cols"] = [{ wch: 22 }, { wch: 32 }, { wch: 12 }, { wch: 10 }, { wch: 22 }];
+
+    const libro = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(libro, hoja, "Movimientos");
+
+    XLSX.writeFile(libro, `movimientos_${fechaArchivo()}.xlsx`);
+
+}
+
+
+// Menú desplegable de "Exportar"
+function abrirMenuExportar(abrir){
+
+    const menu = document.getElementById("menuExportar");
+    const boton = document.getElementById("btnExportar");
+
+    menu.hidden = !abrir;
+    boton.setAttribute("aria-expanded", String(abrir));
+
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    const contenedor = document.getElementById("exportarWrap");
+    const boton = document.getElementById("btnExportar");
+    const menu = document.getElementById("menuExportar");
+
+    if(!contenedor || !boton || !menu) return;
+
+    boton.addEventListener("click", () => {
+
+        const abrir = menu.hidden;
+
+        abrirMenuExportar(abrir);
+
+        if(abrir) menu.querySelector("button").focus();
+
+    });
+
+    document.getElementById("btnExportarPDF").addEventListener("click", () => {
+
+        abrirMenuExportar(false);
+        exportarPDF();
+
+    });
+
+    document.getElementById("btnExportarExcel").addEventListener("click", () => {
+
+        abrirMenuExportar(false);
+        exportarExcel();
+
+    });
+
+    // Clic fuera del menú: se cierra
+    document.addEventListener("click", evento => {
+
+        if(!contenedor.contains(evento.target)) abrirMenuExportar(false);
+
+    });
+
+    // ESC: se cierra y el foco vuelve al botón
+    document.addEventListener("keydown", evento => {
+
+        if(evento.key === "Escape" && !menu.hidden){
+
+            abrirMenuExportar(false);
+            boton.focus();
+
+        }
+
+    });
+
+});
 
 
 document.addEventListener("DOMContentLoaded", () => cargarMovimientos());
