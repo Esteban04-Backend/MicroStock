@@ -344,9 +344,17 @@ function cerrarModal(){
    apiFetch() de todas formas por consistencia (si en algún
    momento se protege, seguirá funcionando sin tocar este
    archivo).
+
+   PUNTO 5.A: esta función se llamaba "cargarRoles", igual que una
+   función global de script.js (login/registro). script.js se carga
+   con "defer", es decir DESPUÉS de este bloque, y su versión
+   reemplazaba a esta: llenaba el <select> del modal de crear pero
+   nunca el arreglo "roles". Por eso, al editar, "roles" seguía
+   vacío y salía "No se pudieron cargar los roles." Se renombra
+   para evitar el choque.
    ========================================================= */
 
-async function cargarRoles(){
+async function cargarRolesUsuarios(){
 
     try{
 
@@ -615,7 +623,7 @@ async function editarUsuario(id){
     // Si los roles aún no se habían cargado, se piden de nuevo
     if(roles.length === 0){
 
-        await cargarRoles();
+        await cargarRolesUsuarios(); // PUNTO 5.A: nombre único (antes chocaba con script.js)
 
     }
 
@@ -791,7 +799,7 @@ function filtrarUsuarios(){
 
 document.addEventListener("DOMContentLoaded", () => {
 
-    cargarRoles();
+    cargarRolesUsuarios(); // PUNTO 5.A: llena "roles" y el select del modal de crear
     cargarUsuarios();
 
 });

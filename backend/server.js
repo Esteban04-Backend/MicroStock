@@ -1295,6 +1295,67 @@ app.get(
 
         try {
 
+            // PUNTO 4: búsqueda opcional ?search=texto (nombre, correo o teléfono).
+            // Se ignora si no es texto (ej.: ?search=a&search=b) y se limita
+            // a 100 caracteres y 5 palabras (mismo criterio que /productos).
+            const textoBusqueda =
+                typeof req.query.search === "string"
+                    ? req.query.search
+                        .trim()
+                        .toLowerCase()
+                        .slice(0, 100)
+                    : "";
+
+            const terminos =
+                textoBusqueda
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 5);
+
+            let filtro = "";
+
+            const parametros = [];
+
+            if (terminos.length > 0) {
+
+                // Cada palabra debe aparecer en nombre O correo O teléfono.
+                // LOWER() + LIKE: no distingue mayúsculas; las tildes las
+                // ignora la collation "ai_ci" de la tabla. El texto escrito
+                // por el usuario va SIEMPRE como parámetro (?), nunca
+                // concatenado al SQL.
+                const condiciones =
+                    terminos.map(
+                        () => `(
+                            LOWER(nombre_cliente) LIKE ?
+                            OR
+                            LOWER(correo) LIKE ?
+                            OR
+                            LOWER(telefono) LIKE ?
+                        )`
+                    );
+
+                filtro =
+                    `WHERE ${condiciones.join(" AND ")}`;
+
+                terminos.forEach(
+                    termino => {
+
+                        // Se escapan \ % _ para buscarlos como texto literal
+                        // y no como comodines de LIKE.
+                        const patron =
+                            `%${termino.replace(/[\\%_]/g, "\\$&")}%`;
+
+                        parametros.push(
+                            patron,
+                            patron,
+                            patron
+                        );
+
+                    }
+                );
+
+            }
+
             const [
                 result
             ] =
@@ -1308,8 +1369,11 @@ app.get(
                         correo,
                         direccion
                     FROM Cliente
+                    ${filtro}
                     ORDER BY id_cliente
-                    `
+                    `,
+
+                    parametros
 
                 );
 
@@ -1468,6 +1532,67 @@ app.get(
 
         try {
 
+            // PUNTO 3: búsqueda opcional ?search=texto (nombre, correo o teléfono).
+            // Se ignora si no es texto (ej.: ?search=a&search=b) y se limita
+            // a 100 caracteres y 5 palabras (mismo criterio que /productos).
+            const textoBusqueda =
+                typeof req.query.search === "string"
+                    ? req.query.search
+                        .trim()
+                        .toLowerCase()
+                        .slice(0, 100)
+                    : "";
+
+            const terminos =
+                textoBusqueda
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 5);
+
+            let filtro = "";
+
+            const parametros = [];
+
+            if (terminos.length > 0) {
+
+                // Cada palabra debe aparecer en nombre O correo O teléfono.
+                // LOWER() + LIKE: no distingue mayúsculas; las tildes las
+                // ignora la collation "ai_ci" de la tabla. El texto escrito
+                // por el usuario va SIEMPRE como parámetro (?), nunca
+                // concatenado al SQL.
+                const condiciones =
+                    terminos.map(
+                        () => `(
+                            LOWER(nombre_proveedor) LIKE ?
+                            OR
+                            LOWER(correo) LIKE ?
+                            OR
+                            LOWER(telefono) LIKE ?
+                        )`
+                    );
+
+                filtro =
+                    `WHERE ${condiciones.join(" AND ")}`;
+
+                terminos.forEach(
+                    termino => {
+
+                        // Se escapan \ % _ para buscarlos como texto literal
+                        // y no como comodines de LIKE.
+                        const patron =
+                            `%${termino.replace(/[\\%_]/g, "\\$&")}%`;
+
+                        parametros.push(
+                            patron,
+                            patron,
+                            patron
+                        );
+
+                    }
+                );
+
+            }
+
             const [
                 result
             ] =
@@ -1481,8 +1606,11 @@ app.get(
                         correo,
                         direccion
                     FROM Proveedor
+                    ${filtro}
                     ORDER BY id_proveedor
-                    `
+                    `,
+
+                    parametros
 
                 );
 

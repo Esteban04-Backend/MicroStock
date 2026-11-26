@@ -3732,6 +3732,78 @@ async function registrarCliente(event) {
 let clientesListado = [];
 
 
+// PUNTO 4: control de la búsqueda de clientes
+//  - temporizadorBusquedaClientes: retraso (debounce) de 300 ms
+//  - solicitudClientes: contador para ignorar respuestas viejas que
+//    lleguen después de una más reciente
+let temporizadorBusquedaClientes = null;
+let solicitudClientes = 0;
+
+
+// PUNTO 4: conecta el campo "Buscar cliente" (se hace una sola vez)
+function activarBuscadorClientes() {
+
+    const campo =
+        document.getElementById(
+            "buscarCliente"
+        );
+
+
+    if (
+        !campo ||
+        campo.dataset.buscadorListo === "1"
+    ) {
+
+        return;
+
+    }
+
+
+    campo.dataset.buscadorListo = "1";
+
+
+    // Al escribir: espera 300 ms sin teclear antes de consultar al servidor
+    campo.addEventListener(
+        "input",
+        () => {
+
+            clearTimeout(
+                temporizadorBusquedaClientes
+            );
+
+            temporizadorBusquedaClientes =
+                setTimeout(
+                    mostrarClientes,
+                    300
+                );
+
+        }
+    );
+
+
+    // Enter busca de inmediato
+    campo.addEventListener(
+        "keydown",
+        evento => {
+
+            if (evento.key === "Enter") {
+
+                evento.preventDefault();
+
+                clearTimeout(
+                    temporizadorBusquedaClientes
+                );
+
+                mostrarClientes();
+
+            }
+
+        }
+    );
+
+}
+
+
 async function mostrarClientes() {
 
     const tabla =
@@ -3758,11 +3830,34 @@ async function mostrarClientes() {
     );
 
 
+    // PUNTO 4: se conecta el buscador (solo la primera vez) y se lee su texto
+    activarBuscadorClientes();
+
+    const campoBusqueda =
+        document.getElementById(
+            "buscarCliente"
+        );
+
+    const termino =
+        campoBusqueda
+            ? campoBusqueda.value.trim()
+            : "";
+
+    const idSolicitud =
+        ++solicitudClientes;
+
+
     try {
+
+        // PUNTO 4: con texto se consulta /clientes?search=..., sin texto el listado completo
+        const endpoint =
+            termino
+                ? `/clientes?search=${encodeURIComponent(termino)}`
+                : "/clientes";
 
         const response =
             await apiFetch(
-                "/clientes"
+                endpoint
             );
 
 
@@ -3770,6 +3865,14 @@ async function mostrarClientes() {
             await getJSON(
                 response
             );
+
+
+        // PUNTO 4: llegó una consulta más reciente; se descarta esta respuesta
+        if (idSolicitud !== solicitudClientes) {
+
+            return;
+
+        }
 
 
         if (!response.ok) {
@@ -3786,6 +3889,26 @@ async function mostrarClientes() {
 
         tabla.innerHTML =
             "";
+
+
+        // PUNTO 4: mensaje cuando no hay resultados
+        if (clientes.length === 0) {
+
+            tabla.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;color:var(--text-light);padding:20px 0;">
+                        ${
+                            termino
+                                ? "No se encontraron clientes con ese criterio."
+                                : "No hay clientes registrados."
+                        }
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
 
 
         clientes.forEach(
@@ -4113,6 +4236,78 @@ async function registrarProveedor(event) {
 let proveedoresListado = [];
 
 
+// PUNTO 3: control de la búsqueda de proveedores
+//  - temporizadorBusquedaProveedores: retraso (debounce) de 300 ms
+//  - solicitudProveedores: contador para ignorar respuestas viejas que
+//    lleguen después de una más reciente
+let temporizadorBusquedaProveedores = null;
+let solicitudProveedores = 0;
+
+
+// PUNTO 3: conecta el campo "Buscar proveedor" (se hace una sola vez)
+function activarBuscadorProveedores() {
+
+    const campo =
+        document.getElementById(
+            "buscarProveedor"
+        );
+
+
+    if (
+        !campo ||
+        campo.dataset.buscadorListo === "1"
+    ) {
+
+        return;
+
+    }
+
+
+    campo.dataset.buscadorListo = "1";
+
+
+    // Al escribir: espera 300 ms sin teclear antes de consultar al servidor
+    campo.addEventListener(
+        "input",
+        () => {
+
+            clearTimeout(
+                temporizadorBusquedaProveedores
+            );
+
+            temporizadorBusquedaProveedores =
+                setTimeout(
+                    mostrarProveedores,
+                    300
+                );
+
+        }
+    );
+
+
+    // Enter busca de inmediato
+    campo.addEventListener(
+        "keydown",
+        evento => {
+
+            if (evento.key === "Enter") {
+
+                evento.preventDefault();
+
+                clearTimeout(
+                    temporizadorBusquedaProveedores
+                );
+
+                mostrarProveedores();
+
+            }
+
+        }
+    );
+
+}
+
+
 async function mostrarProveedores() {
 
     const tabla =
@@ -4139,11 +4334,34 @@ async function mostrarProveedores() {
     );
 
 
+    // PUNTO 3: se conecta el buscador (solo la primera vez) y se lee su texto
+    activarBuscadorProveedores();
+
+    const campoBusqueda =
+        document.getElementById(
+            "buscarProveedor"
+        );
+
+    const termino =
+        campoBusqueda
+            ? campoBusqueda.value.trim()
+            : "";
+
+    const idSolicitud =
+        ++solicitudProveedores;
+
+
     try {
+
+        // PUNTO 3: con texto se consulta /proveedores?search=..., sin texto el listado completo
+        const endpoint =
+            termino
+                ? `/proveedores?search=${encodeURIComponent(termino)}`
+                : "/proveedores";
 
         const response =
             await apiFetch(
-                "/proveedores"
+                endpoint
             );
 
 
@@ -4151,6 +4369,14 @@ async function mostrarProveedores() {
             await getJSON(
                 response
             );
+
+
+        // PUNTO 3: llegó una consulta más reciente; se descarta esta respuesta
+        if (idSolicitud !== solicitudProveedores) {
+
+            return;
+
+        }
 
 
         if (!response.ok) {
@@ -4167,6 +4393,206 @@ async function mostrarProveedores() {
 
         tabla.innerHTML =
             "";
+
+
+        // PUNTO 3: mensaje cuando no hay resultados
+        if (proveedores.length === 0) {
+
+            tabla.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;color:var(--text-light);padding:20px 0;">
+                        ${
+                            termino
+                                ? "No se encontraron proveedores con ese criterio."
+                                : "No hay proveedores registrados."
+                        }
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        proveedores.forEach(
+            proveedor => {
+
+                const fila =
+                    document.createElement(
+                        "tr"
+                    );
+
+
+                fila.innerHTML = `
+
+                    <td>
+                        ${escapeHTML(
+                            proveedor.id_proveedor
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            proveedor.nombre_proveedor
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            proveedor.telefono
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            proveedor.correo
+                        )}
+                    </td>
+
+                    <td>
+                        ${escapeHTML(
+                            proveedor.direccion
+                        )}
+                    </td>
+
+                    <td>
+                        Activo
+                    </td>
+
+                    ${celdaAccionesHTML(
+                        proveedor.id_proveedor,
+                        proveedor.nombre_proveedor
+                    )}
+
+                `;
+
+
+                tabla.appendChild(
+                    fila
+                );
+
+            }
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Error obteniendo proveedores:",
+            error
+        );
+
+    }
+
+}
+
+
+async function mostrarProveedores() {
+
+    const tabla =
+        document.querySelector(
+            "#tablaProveedores tbody"
+        );
+
+
+    if (!tabla) {
+
+        return;
+
+    }
+
+
+    // CAMBIO 3: listeners de Editar/Eliminar (se registran una sola vez
+    // aunque la tabla se repinte muchas veces).
+    activarAccionesTabla(
+        "#tablaProveedores tbody",
+        {
+            editar: editarProveedor,
+            eliminar: eliminarProveedor
+        }
+    );
+
+
+    // PUNTO 3: se conecta el buscador (solo la primera vez) y se lee su texto
+    activarBuscadorProveedores();
+
+    const campoBusqueda =
+        document.getElementById(
+            "buscarProveedor"
+        );
+
+    const termino =
+        campoBusqueda
+            ? campoBusqueda.value.trim()
+            : "";
+
+    const idSolicitud =
+        ++solicitudProveedores;
+
+
+    try {
+
+        // PUNTO 3: con texto se consulta /proveedores?search=..., sin texto el listado completo
+        const endpoint =
+            termino
+                ? `/proveedores?search=${encodeURIComponent(termino)}`
+                : "/proveedores";
+
+        const response =
+            await apiFetch(
+                endpoint
+            );
+
+
+        const proveedores =
+            await getJSON(
+                response
+            );
+
+
+        // PUNTO 3: llegó una consulta más reciente; se descarta esta respuesta
+        if (idSolicitud !== solicitudProveedores) {
+
+            return;
+
+        }
+
+
+        if (!response.ok) {
+
+            return;
+
+        }
+
+
+        // CAMBIO 3: se guarda el listado para el modal y el borrado
+        proveedoresListado =
+            proveedores;
+
+
+        tabla.innerHTML =
+            "";
+
+
+        // PUNTO 3: mensaje cuando no hay resultados
+        if (proveedores.length === 0) {
+
+            tabla.innerHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center;color:var(--text-light);padding:20px 0;">
+                        ${
+                            termino
+                                ? "No se encontraron proveedores con ese criterio."
+                                : "No hay proveedores registrados."
+                        }
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
 
 
         proveedores.forEach(
